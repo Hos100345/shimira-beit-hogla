@@ -32,6 +32,9 @@
   .sub{color:#AEB8CD;font-size:14px;margin-top:2px}
 
   .quick-actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+  .week-filter{display:flex;gap:6px;margin-top:10px}
+  .wf-btn{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#AEB8CD;font-family:"Assistant";font-weight:600;font-size:12.5px;padding:6px 0;border-radius:9px;cursor:pointer;text-align:center;transition:all .15s}
+  .wf-btn.active{background:var(--lamp);border-color:var(--lamp);color:var(--ink)}
   .btn-action{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:"Assistant";font-weight:600;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px}
   .btn-action:hover{background:rgba(255,255,255,0.15);border-color:var(--lamp)}
   .btn-action.primary{background:rgba(232,163,61,0.15);border-color:var(--lamp);color:var(--lamp)}
@@ -157,6 +160,11 @@
       <button type="button" class="btn-action" onclick="toggleImportZone(event)">📥 הדבק סיכום מוכן</button>
       <button type="button" class="btn-action primary" onclick="loadPreviousWeek(event)">📅 טען זמינות משבוע שעבר</button>
     </div>
+    <div class="week-filter">
+      <button type="button" class="wf-btn active" data-filter="all" onclick="setWeekFilter('all',this)">שבוע מלא</button>
+      <button type="button" class="wf-btn" data-filter="weekdays" onclick="setWeekFilter('weekdays',this)">ימי חול</button>
+      <button type="button" class="wf-btn" data-filter="weekend" onclick="setWeekFilter('weekend',this)">סוף שבוע</button>
+    </div>
 
     <div class="import-zone" id="importZone">
       <textarea id="importText" placeholder="הדבק כאן את טקסט הסיכום ששמרת או שקיבלת (לדוגמה: • יום ראשון | שעות 02:00-04:00 ← ✕ לא יכול)..."></textarea>
@@ -199,7 +207,7 @@
     <div class="summary-grid" id="summaryGrid"></div>
   </div>
 
-  <div class="note">22:00–02:00 בכל לילה הוא תורנות ישוב — לא נבחר כאן.</div>
+  <div class="note">בלוק "תושב הישוב" (22:00–02:00) — סמן זמינות רק אם אתה משמש גם כשומר חיצוני.</div>
 </div>
 
 <div class="bar">
@@ -240,12 +248,31 @@
     return out;
   }
   const BLOCKS = [
-    {key:"morning", label:"בוקר", time:"06:00-14:00", slots:hourSlots(6,14)},
-    {key:"evening", label:"ערב",  time:"14:00-22:00", slots:hourSlots(14,22)},
-    {key:"night",   label:"לילה", time:"02:00-06:00", slots:hourSlots(2,6)},
+    {key:"morning",  label:"בוקר",          time:"06:00-14:00", slots:hourSlots(6,14)},
+    {key:"evening",  label:"ערב",            time:"14:00-22:00", slots:hourSlots(14,22)},
+    {key:"external", label:"תושב הישוב",    time:"22:00-02:00", slots:["22:00-23:00","23:00-00:00","00:00-01:00","01:00-02:00"]},
+    {key:"night",    label:"לילה",           time:"02:00-06:00", slots:hourSlots(2,6)},
   ];
 
   let state = {};
+  let weekFilter = sessionStorage.getItem('wf') || 'all';
+
+  function setWeekFilter(f, btn){
+    weekFilter = f;
+    sessionStorage.setItem('wf', f);
+    document.querySelectorAll('.wf-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('[data-day-idx]').forEach(el => {
+      const idx = parseInt(el.dataset.dayIdx);
+      const hide = (f === 'weekdays' && idx >= 5) || (f === 'weekend' && idx < 5);
+      el.style.display = hide ? 'none' : '';
+    });
+    updateCounter();
+  }
+
+  function applyStoredFilter(){
+    const btn = document.querySelector(`.wf-btn[data-filter="${weekFilter}"]`);
+    if(btn) setWeekFilter(weekFilter, btn);
+  }
 
   function pickerHtml(path){
     let h = '<div class="picker" data-path="'+path+'">';
@@ -285,6 +312,7 @@
     '</div>';
   }
 
+
   function buildGlobal(){
     const root = document.getElementById("globalPanel");
     root.innerHTML = "";
@@ -294,4 +322,348 @@
         '<span class="day-name">החל על כל השבוע בבת אחת (הגדרה מהירה)</span>'+
         '<span class="global-badge">מילוי גלובלי</span>'+
       '</div>'+
-      '<div class="global-sub">בחר משמרת שלמה כדי להחיל אותה מיידית על כל ימי השבוע. לאחר מכן תוכל לתקן נקודתית בימים למ2ؔ
+      '<div class="global-sub">בחר משמרת שלמה כדי להחיל אותה מיידית על כל ימי השבוע. לאחר מכן תוכל לתקן נקודתית בימים.</div>'+
+      '<div class="day-body" style="max-height:3000px;">';
+    BLOCKS.forEach(b=>{ html += blockHtml("all", b, true); });
+    html += '</div>';
+    card.innerHTML = html;
+    root.appendChild(card);
+  }
+
+  function build(){
+    buildGlobal();
+    const root = document.getElementById("days");
+    root.innerHTML = "";
+    DAYS.forEach((d,di)=>{
+      state[di] = {};
+      const card = document.createElement("div");
+      card.className = "day";
+      card.dataset.dayIdx = di;
+
+      let html = '<div class="day-head" onclick="toggleDayAccordion(event, this)">'+
+                 '<span class="day-arrow">▼</span>'+
+                 '<span class="day-name">יום ' + d.name + '</span>'+
+                 '<span class="day-date">'+d.date+'</span>'+
+                 (d.shab?'<span class="shab">'+d.shab+'</span>':'')+
+                 '</div>'+
+                 '<div class="day-body">'+
+                 '<div style="padding:10px 16px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
+                   '<span style="font-size:13px;font-weight:600;">מלאי יום זה:</span>'+
+                   '<button type="button" class="btn-fast v1" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'1\')">רמה 1</button>'+
+                   '<button type="button" class="btn-fast v2" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'2\')">רמה 2</button>'+
+                   '<button type="button" class="btn-fast v3" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'3\')">רמה 3</button>'+
+                   '<button type="button" class="btn-fast vx" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'x\')">רמה ✕</button>'+
+                 '</div>';
+
+      BLOCKS.forEach(b=>{
+        state[di][b.key] = {level:"1", slots:{}};
+        b.slots.forEach(s => { state[di][b.key].slots[s] = "1"; });
+        html += blockHtml(di, b, false);
+      });
+      html += '</div>';
+      card.innerHTML = html;
+      root.appendChild(card);
+    });
+    updateProgress();
+  }
+
+  function toggleDayAccordion(event, headElement) {
+    if(event.target.closest('.picker') || event.target.closest('.detail-toggle') ||
+       event.target.closest('.seg') || event.target.closest('.btn-fast')) return;
+    const card = headElement.parentElement;
+    const isOpen = card.classList.contains("open");
+    document.querySelectorAll(".day:not(.global-card)").forEach(c => { if(c !== card) c.classList.remove("open"); });
+    card.classList.toggle("open", !isOpen);
+  }
+
+  function selectInPicker(picker, v){
+    if(!picker) return;
+    picker.querySelectorAll(".seg").forEach(s=>s.classList.remove("sel"));
+    const target = picker.querySelector('.seg[data-v="'+v+'"]');
+    if(target) target.classList.add("sel");
+  }
+
+  function syncDayPicker(path, v){
+    const picker = document.querySelector('.picker[data-path="'+path+'"]');
+    if(picker) selectInPicker(picker, v);
+  }
+
+  function checkAndUpdateBlockHeader(di, bk) {
+    if(di === "all") return;
+    const blockConfig = BLOCKS.find(b => b.key === bk);
+    if (!blockConfig) return;
+    const slots = blockConfig.slots;
+    const firstVal = state[di][bk].slots[slots[0]] || "1";
+    const allEqual = slots.every(s => (state[di][bk].slots[s] || "1") === firstVal);
+    state[di][bk].level = allEqual ? firstVal : "1";
+    syncDayPicker(di + "." + bk, state[di][bk].level);
+  }
+
+  function fastFillGlobal(bk, v) {
+    for(let di=0; di<DAYS.length; di++){
+      state[di][bk].level = v;
+      syncDayPicker(di+"."+bk, v);
+      const blockConfig = BLOCKS.find(b => b.key === bk);
+      if(blockConfig) {
+        blockConfig.slots.forEach(s => {
+          state[di][bk].slots[s] = v;
+          syncDayPicker(di+"."+bk+"::"+s, v);
+        });
+      }
+    }
+    const blockGlobal = BLOCKS.find(b => b.key === bk);
+    if(blockGlobal) blockGlobal.slots.forEach(s => syncDayPicker("all."+bk+"::"+s, v));
+    updateProgress();
+  }
+
+  function fastFillDay(di, v) {
+    BLOCKS.forEach(b => {
+      state[di][b.key].level = v;
+      syncDayPicker(di+"."+b.key, v);
+      b.slots.forEach(s => {
+        state[di][b.key].slots[s] = v;
+        syncDayPicker(di+"."+b.key+"::"+s, v);
+      });
+    });
+    updateProgress();
+  }
+
+  function setVal(event, btn){
+    if(event && event.stopPropagation) event.stopPropagation();
+    const picker = btn.parentElement;
+    const path = picker.dataset.path, v = btn.dataset.v;
+    selectInPicker(picker, v);
+
+    let base = path, slot = null;
+    if(path.includes("::")){ const parts = path.split("::"); base = parts[0]; slot = parts[1]; }
+    const seg = base.split("."), diRaw = seg[0], bk = seg[1];
+
+    if(diRaw === "all"){
+      if(slot) {
+        for(let di=0; di<DAYS.length; di++){
+          state[di][bk].slots[slot] = v;
+          syncDayPicker(di+"."+bk+"::"+slot, v);
+          checkAndUpdateBlockHeader(di, bk);
+        }
+      }
+    } else {
+      if(slot){
+        state[diRaw][bk].slots[slot] = v;
+        checkAndUpdateBlockHeader(diRaw, bk);
+      } else {
+        state[diRaw][bk].level = v;
+        const blockConfig = BLOCKS.find(b => b.key === bk);
+        if(blockConfig) {
+          blockConfig.slots.forEach(s => {
+            state[diRaw][bk].slots[s] = v;
+            syncDayPicker(diRaw+"."+bk+"::"+s, v);
+          });
+        }
+      }
+    }
+    updateProgress();
+  }
+
+  function toggleDetail(event, btn, path){
+    if(event && event.stopPropagation) event.stopPropagation();
+    const slots = document.querySelector('[data-slots="'+path+'"]');
+    const open = !slots.classList.contains("open");
+    slots.classList.toggle("open", open);
+    btn.classList.toggle("on", open);
+    btn.textContent = open ? "סגור פירוט" : "פרט שעות";
+  }
+
+  function updateProgress(){
+    let changed = 0, total = 0;
+    Object.values(state).forEach(day => {
+      Object.values(day).forEach(b => {
+        total++;
+        const hasCustomHours = Object.values(b.slots).some(v => v !== "1");
+        if(b.level !== "1" || hasCustomHours) changed++;
+      });
+    });
+    document.getElementById("filled").textContent = changed;
+    document.getElementById("total").textContent = total;
+    generateSummaryGrid();
+  }
+
+  function getCompressedRanges(slotsObject) {
+    const hoursArray = Array.from({length: 25}, (_, i) => ("0" + i).slice(-2) + ":00");
+    const ranges = [];
+    let currentVal = null, startHour = null, lastEndHour = null;
+    for (let i = 0; i < hoursArray.length - 1; i++) {
+      const currentSlotStr = hoursArray[i] + "-" + hoursArray[i+1];
+      const slotVal = slotsObject[currentSlotStr] || "1";
+      if (slotVal !== currentVal) {
+        if (currentVal && currentVal !== "1") ranges.push({ start: startHour, end: lastEndHour, val: currentVal });
+        currentVal = slotVal; startHour = hoursArray[i];
+      }
+      lastEndHour = hoursArray[i+1];
+    }
+    if (currentVal && currentVal !== "1") ranges.push({ start: startHour, end: lastEndHour, val: currentVal });
+    return ranges;
+  }
+
+  function generateSummaryGrid() {
+    const grid = document.getElementById("summaryGrid");
+    grid.innerHTML = "";
+    let hasChanges = false;
+    DAYS.forEach((d, di) => {
+      const dayFullSlots = {};
+      BLOCKS.forEach(b => {
+        Object.entries(state[di][b.key].slots || {}).forEach(([hour, val]) => { dayFullSlots[hour] = val; });
+      });
+      const compressed = getCompressedRanges(dayFullSlots);
+      if (compressed.length > 0) {
+        hasChanges = true;
+        compressed.forEach(range => {
+          const item = document.createElement("div");
+          item.className = "sum-item";
+          let color = "var(--lx)", txt = "✕ לא זמין";
+          if (range.val === "2") { color = "var(--l2)"; txt = "זמינות 2"; }
+          if (range.val === "3") { color = "var(--l3)"; txt = "עדיפות גבוהה"; }
+          item.innerHTML = `<div><span class="sum-day">יום ${d.name}</span><span class="sum-time">${range.start}-${range.end}</span></div>
+                          <span class="sum-badge" style="background:${color}">${txt}</span>`;
+          grid.appendChild(item);
+        });
+      }
+    });
+    if (!hasChanges) grid.innerHTML = '<div class="sum-empty">לא שינית עדיין שום משמרת (זמינות 1 לכל ימי השבוע)</div>';
+  }
+
+  function copySummaryText(event) {
+    if(event) event.stopPropagation();
+    let txt = `סיכום זמינות שמירות - ${GUARD}\n===================\n`;
+    let hasChanges = false;
+    DAYS.forEach((d, di) => {
+      const dayFullSlots = {};
+      BLOCKS.forEach(b => {
+        Object.entries(state[di][b.key].slots || {}).forEach(([hour, val]) => { dayFullSlots[hour] = val; });
+      });
+      const compressed = getCompressedRanges(dayFullSlots);
+      if (compressed.length > 0) {
+        hasChanges = true;
+        compressed.forEach(range => {
+          let vTxt = "זמינות 1";
+          if (range.val === "2") vTxt = "זמינות 2";
+          if (range.val === "3") vTxt = "זמינות 3";
+          if (range.val === "x") vTxt = "✕ לא זמין";
+          txt += `• יום ${d.name} | שעות ${range.start}-${range.end} → ${vTxt}\n`;
+        });
+      }
+    });
+    if (!hasChanges) txt += "כל המשמרות ברמת זמינות 1.";
+    navigator.clipboard.writeText(txt).then(() => alert("הסיכום הועתק!"));
+  }
+
+  function toggleImportZone(event) {
+    if(event) event.stopPropagation();
+    document.getElementById("importZone").classList.toggle("show");
+  }
+
+  function processImportText(event) {
+    if(event) event.stopPropagation();
+    const rawTxt = document.getElementById("importText").value;
+    if(!rawTxt.trim()) { alert("אנא הדבק טקסט יבוא תחילה."); return; }
+    const txt = rawTxt.replace(/[''"״]/g, "");
+    DAYS.forEach((d, di) => {
+      BLOCKS.forEach(b => {
+        state[di][b.key].level = "1";
+        b.slots.forEach(s => { state[di][b.key].slots[s] = "1"; });
+      });
+    });
+    const lines = txt.split('\n');
+    let countParsed = 0;
+    lines.forEach(line => {
+      let foundDayIdx = -1;
+      DAYS.forEach((d, di) => { if (line.includes(`יום ${d.name}`)) foundDayIdx = di; });
+      if (foundDayIdx === -1) return;
+      let val = "1";
+      if (line.includes("✕") || line.includes("לא זמין") || line.includes("לא_זמין")) val = "x";
+      else if (line.includes("זמינות 2")) val = "2";
+      else if (line.includes("זמינות 3") || line.includes("עדיפות גבוהה")) val = "3";
+      const timeMatch = line.match(/(\d{2}:\d{2})[-–](\d{2}:\d{2})/);
+      if (timeMatch) {
+        const startH = parseInt(timeMatch[1].split(':')[0], 10);
+        const endH = parseInt(timeMatch[2].split(':')[0], 10);
+        BLOCKS.forEach(b => {
+          b.slots.forEach(s => {
+            const slotStart = parseInt(s.split(':')[0], 10);
+            if (slotStart >= startH && slotStart < endH) {
+              state[foundDayIdx][b.key].slots[s] = val;
+              countParsed++;
+            }
+          });
+        });
+      }
+    });
+    DAYS.forEach((d, di) => {
+      BLOCKS.forEach(b => {
+        checkAndUpdateBlockHeader(di, b.key);
+        b.slots.forEach(s => { syncDayPicker(`${di}.${b.key}::${s}`, state[di][b.key].slots[s]); });
+      });
+    });
+    updateProgress();
+    toggleImportZone();
+    alert(`הטיפול הצליח! עודכנו ${countParsed} שעות.`);
+  }
+
+  function loadPreviousWeek(event) {
+    if(event) event.stopPropagation();
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) { alert("לא נמצא מידע שבוע קודם. הגש את הטופס השבוע כדי לשמור את הנתונים."); return; }
+    try {
+      const parsed = JSON.parse(saved);
+      DAYS.forEach((d, di) => {
+        if (parsed[di]) {
+          BLOCKS.forEach(b => {
+            if (parsed[di][b.key]) {
+              state[di][b.key] = parsed[di][b.key];
+              syncDayPicker(di + "." + b.key, state[di][b.key].level);
+              if (state[di][b.key].slots) {
+                Object.entries(state[di][b.key].slots).forEach(([hour, val]) => {
+                  syncDayPicker(di + "." + b.key + "::" + hour, val);
+                });
+              }
+            }
+          });
+        }
+      });
+      updateProgress();
+      alert("הזמינות מהשבוע הקודם נטענה בהצלחה!");
+    } catch (e) { console.error(e); }
+  }
+
+  function submitForm(event){
+    if(event && event.preventDefault) event.preventDefault();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+    const payload = {
+      guard: GUARD,
+      days: state,
+      submittedAt: new Date().toISOString()
+    };
+
+    const btn = document.getElementById("sendBtn");
+    btn.disabled = true;
+    btn.textContent = "שולח...";
+
+    google.script.run
+      .withSuccessHandler(function() {
+        document.getElementById("toast").classList.add("show");
+        btn.disabled = false;
+        btn.textContent = "שלח זמינות";
+      })
+      .withFailureHandler(function(err) {
+        alert("שגיאה בשליחה: " + (err.message || err));
+        btn.disabled = false;
+        btn.textContent = "שלח זמינות";
+      })
+      .saveGuardPreferences(payload);
+  }
+
+  build();
+  applyStoredFilter();
+</script>
+</body>
+</html>
