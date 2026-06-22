@@ -21,7 +21,6 @@ const SHEET_EXTERNAL = '📅 שומרים חיצוניים';
 const SHEET_HISTORY = '📊 היסטוריה וחוב';  
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני  
 const SHEET_HELP = '📖 הוראות הפעלה';  
-const SHEET_SWAPS = '🔁 תיקוני בלתם';  
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -130,7 +129,6 @@ function onOpen() {
  .addItem('▶️ הרץ שיבוץ', 'runScheduler')  
  .addItem('🔄 פרוס מחדש (פריסה חלופית)', 'replanSchedule')  
  .addItem('➕ הארך משמרות ופרוס', 'extendAndReplan')  
- .addItem('🔁 החלף שומר במשמרת (בלתם)', 'applySwaps')  
  .addItem('⚡ הפעל מילוי מהיר', 'runQuickFill')  
  .addItem('🚦 עדכן רמזור', 'updateTrafficLights')  
  .addSeparator()  
@@ -154,31 +152,45 @@ function setupV2() {
   
  const sh = getCleanSheet_(ss, SHEET_SETTINGS);  
  sh.setRightToLeft(true);  
- const rows = [  
- ['פרמטר', 'ערך', 'הסבר'],  
- ['MAX_SHIFT_LENGTH', 4, 'מקסימום שעות רצופות לשומר'],  
- ['MIN_SHIFT_LENGTH', 2, 'מינימום שעות רצופות לפני החלפת שומר'],  
- ['MIN_REST_TIME', 4, 'שעות מנוחה חובה בין משמרות'],  
- ['NIGHT_REST_TIME', 8, 'שעות מנוחה חובה אחרי משמרת לילה'],  
- ['MAX_BACKTRACK_HOURS', 3, 'כמה שעות האלגוריתם חוזר אחורה לתקן מבוי סתום'],  
- ['MAX_WEEKDAY_DEBT_HOURS', 2, 'מקסימום הפרש שעות שבועי בין שומרים (CAP איזון)'],  
- ['GREEN_MAX_POINTS', 20, 'רמזור: עד כמה נקודות חסימה השומר נשאר ירוק'],  
- ['YELLOW_MAX_POINTS', 40, 'רמזור: עד כמה נקודות השומר צהוב (מעבר = אדום)'],  
- ['QUESTION_COST_FACTOR', 0.5, 'כמה עולה ? ביחס ל-X (0.5 = חצי)'],  
- ['DEBT_SENSITIVITY', 2, 'כמה כל נקודת חוב משבוע שעבר מורידה את רף הרמזור'],  
- ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון השבת'],  
- ['SHABBAT_START_HOUR', 6, 'שעת תחילת חלון השבת (24ש)'],  
- ['SHABBAT_END_DAY', 'ראשון', 'יום סיום חלון השבת'],  
- ['SHABBAT_END_HOUR', 6, 'שעת סיום חלון השבת (24ש)'],  
- ['WEEK_START_DATE', '', 'תאריך יום ראשון של השבוע המשובץ (לייבוא שומרים חיצוניים)'],  
- ['AVAIL_SPREADSHEET_ID', '', 'מזהה קובץ הזמינות המשותף (מתמלא אוטומטית)'],  
- ['PUBLISH_SPREADSHEET_ID', '', 'מזהה קובץ הפרסום לשומרים (מתמלא אוטומטית)'],  
- ['EXTERNAL_SPREADSHEET_ID', '', 'מזהה קובץ השומרים החיצוניים הנפרד (אם ריק — נקרא מהטבלה המקומית)'],  
- ];  
- sh.getRange(1, 1, rows.length, 3).setValues(rows);  
- styleHeader_(sh.getRange(1, 1, 1, 3));  
- sh.getRange(2, 2, rows.length - 1, 1).setBackground('#fff2cc');  
- sh.getRange(16, 2).setNumberFormat('dd/mm/yyyy'); // WEEK_START_DATE (זז בעקבות הגדרות שבת + CAP)  
+ const rows = [
+ ['פרמטר', 'ערך', 'הסבר'],
+ // ── ⏱ זמני משמרות ומנוחה ──
+ ['⏱ זמני משמרות ומנוחה', '', ''],
+ ['MAX_SHIFT_LENGTH', 4, 'מקסימום שעות רצופות למשמרת אחת (ברירת מחדל: 4)'],
+ ['MIN_SHIFT_LENGTH', 2, 'מינימום שעות רצופות לפני החלפת שומר (ברירת מחדל: 2)'],
+ ['MIN_REST_TIME', 4, 'שעות מנוחה מינימליות בין שתי משמרות רגילות (ברירת מחדל: 4)'],
+ ['NIGHT_REST_TIME', 8, 'שעות מנוחה חובה אחרי משמרת לילה (שעות קטנות, ברירת מחדל: 8)'],
+ ['MAX_BACKTRACK_HOURS', 3, 'מספר השעות שהאלגוריתם חוזר אחורה כשנתקע במבוי סתום (ברירת מחדל: 3)'],
+ // ── 📊 ניקוד ואיזון ──
+ ['📊 ניקוד ואיזון', '', ''],
+ ['MAX_WEEKDAY_DEBT_HOURS', 2, 'סף הפרש שעות שבועי בין שומרים; מעל הסף — האלגוריתם מאזן (ברירת מחדל: 2)'],
+ ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות חסימה הצבורות השומר נשאר ירוק (פנוי לשיבוץ)'],
+ ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות = רמזור צהוב; מעל זה = אדום (עמוס — ישובץ רק בהכרח)'],
+ ['QUESTION_COST_FACTOR', 0.5, 'עלות "?" ביחס ל-"✕" (0.5 = חצי נקודה, 1.0 = שווה ל-✕)'],
+ ['DEBT_SENSITIVITY', 2, 'כמה נקודות חוב מהשבוע הקודם מורידות את סף הרמזור של השומר'],
+ // ── 📅 חלון שבת ──
+ ['📅 חלון שבת', '', ''],
+ ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון שבת/חג (ברירת מחדל: שישי)'],
+ ['SHABBAT_START_HOUR', 6, 'שעת פתיחת חלון שבת ביום ההתחלה — פורמט 24 שעות (ברירת מחדל: 6)'],
+ ['SHABBAT_END_DAY', 'ראשון', 'יום סיום חלון שבת/חג (ברירת מחדל: ראשון)'],
+ ['SHABBAT_END_HOUR', 6, 'שעת סגירת חלון שבת ביום הסיום — פורמט 24 שעות (ברירת מחדל: 6)'],
+ // ── 🔗 גיליונות מקושרים ──
+ ['🔗 גיליונות מקושרים', '', ''],
+ ['WEEK_START_DATE', '', 'תאריך יום ראשון של השבוע המשובץ; משמש לייבוא שומרים חיצוניים מהקובץ המשותף'],
+ ['AVAIL_SPREADSHEET_ID', '', 'מזהה Google Sheets של קובץ הזמינות (ממולא אוטומטית ע"י createAvailabilityFile)'],
+ ['PUBLISH_SPREADSHEET_ID', '', 'מזהה Google Sheets לפרסום לוח השמירות לשומרים (ממולא אוטומטית)'],
+ ['EXTERNAL_SPREADSHEET_ID', '', 'מזהה קובץ נפרד לשומרים חיצוניים; ריק = קריאה מהטבלה המקומית'],
+ ];
+ sh.getRange(1, 1, rows.length, 3).setValues(rows);
+ styleHeader_(sh.getRange(1, 1, 1, 3));
+ sh.getRange(2, 2, rows.length - 1, 1).setBackground('#fff2cc');
+ // עיצוב כותרות סעיפים: שורות 2, 8, 14, 19 (אינדקס 1-based בגיליון)
+ [2, 8, 14, 19].forEach(r => {
+   const hdr = sh.getRange(r, 1, 1, 3);
+   hdr.setBackground('#f3f3f3').setFontWeight('bold');
+   sh.getRange(r, 2).setBackground('#f3f3f3'); // ביטול הצהוב לתאי ערך בשורת כותרת
+ });
+ sh.getRange(20, 2).setNumberFormat('dd/mm/yyyy'); // WEEK_START_DATE  
   
  const w = [  
  ['סוג בלוק', 'משקל קושי'],  
@@ -1103,121 +1115,6 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  sh.setColumnWidth(1, 115).setColumnWidth(2, 155).setColumnWidth(3, 175).setColumnWidth(4, 140);  
  sh.setFrozenRows(1);  
   
- buildSwapsSheet_(ss, guards);  
-}  
-  
-/* ============================================================  
- * 🔁 תיקוני בלתם  
- * ============================================================ */  
-function buildSwapsSheet_(ss, guards) {  
- const sh = getCleanSheet_(ss, SHEET_SWAPS);  
- sh.setRightToLeft(true);  
- sh.getRange(1, 1, 1, 6).setValues([['יום', 'בלוק', 'שומר מקורי', 'מחליף (נכנס במקום)', 'סטטוס', 'הערה']]);  
- styleHeader_(sh.getRange(1, 1, 1, 6));  
- sh.setFrozenRows(1);  
-  
- const N = 40;  
- const blockLabels = buildBlocks_().map(b => b.label);  
- sh.getRange(2, 1, N, 1).setDataValidation(SpreadsheetApp.newDataValidation()  
- .requireValueInList(DAYS, true).setAllowInvalid(false).build());  
- sh.getRange(2, 2, N, 1).setDataValidation(SpreadsheetApp.newDataValidation()  
- .requireValueInList(blockLabels, true).setAllowInvalid(false).build());  
- sh.getRange(2, 4, N, 1).setDataValidation(SpreadsheetApp.newDataValidation()  
- .requireValueInList(guards, true).setAllowInvalid(false).build());  
-  
- const tips = [  
- '💡 איך מתקנים החלפת בלתם: רשום יום + בלוק + מי נכנס במקום, ואז תפריט 🛡️ ← 🔁 החלף שומר במשמרת.',  
- 'עמודת "שומר מקורי" מתמלאת אוטומטית מהלוח — אפשר להשאיר ריק.',  
- 'הנקודות והשעות יעברו מהמקורי למחליף, והתא בלוח שמירות יתעדכן ל"שם (בלתם)".',  
- '✅ יופיע בעמודת סטטוס אחרי ביצוע. שורה מבוצעת לא תרוץ שוב.',  
- ];  
- tips.forEach((t, i) => sh.getRange(i + 1, 8).setValue(t).setFontColor('#555555').setFontSize(10));  
- sh.setColumnWidth(1, 70).setColumnWidth(2, 110).setColumnWidths(3, 2, 150)  
- .setColumnWidth(5, 90).setColumnWidth(6, 160).setColumnWidth(8, 420);  
-}  
-  
-function applySwaps() {  
- const mgmt = mgmt_();  
- const guards = readGuards_(mgmt);  
- const cfg = readSettings_(mgmt);  
- const sw = mgmt.getSheetByName(SHEET_SWAPS);  
- const sched = mgmt.getSheetByName(SHEET_SCHEDULE);  
- const ui = SpreadsheetApp.getUi();  
- if (!sw || !sched) { ui.alert('חסרה לשונית. הרץ קודם שיבוץ.'); return; }  
-  
- const last = sw.getLastRow();  
- if (last < 2) { ui.alert('אין תיקונים לבצע'); return; }  
- const swaps = sw.getRange(2, 1, last - 1, 6).getValues();  
-  
- const schedData = sched.getRange(1, 1, sched.getLastRow(), 4).getValues();  
-  
- const points = {}, hours = {};  
- guards.forEach(g => { points[g] = 0; hours[g] = 0; });  
-  
- let done = 0;  
- swaps.forEach((row, idx) => {  
- const [day, block, origRaw, replacement, status] = row.map(x => String(x).trim());  
- if (status === '✅' || !day || !block || !replacement) return;  
- if (guards.indexOf(replacement) < 0) { sw.getRange(2 + idx, 5).setValue('⚠️ מחליף לא ברשימה'); return; }  
-  
- const reqStart = parseInt(block.slice(0, 2), 10);  
- let curDay = '', foundRow = -1, foundLabel = '';  
- for (let k = 0; k < schedData.length; k++) {  
- const a = String(schedData[k][0]).trim();  
- if (a.indexOf('⭐') === 0) { curDay = a.replace('⭐', '').split('(')[0].trim(); continue; }  
- if (curDay !== day || a.indexOf('-') < 0) continue;  
- if (a === block) { foundRow = k; foundLabel = a; break; }  
- const sH = parseInt(a.slice(0, 2), 10), eH = parseInt(a.slice(6, 8), 10);  
- const within = (eH <= sH) ? (reqStart >= sH || reqStart < eH) : (reqStart >= sH && reqStart < eH);  
- if (within) { foundRow = k; foundLabel = a; break; }  
- }  
- if (foundRow < 0) { sw.getRange(2 + idx, 5).setValue('⚠️ לא נמצא בלוח'); return; }  
-  
- const posA = String(schedData[foundRow][1]).trim();  
- if (posA === '—' || posA.indexOf('🚨') === 0) {  
- sw.getRange(2 + idx, 5).setValue('⚠️ עמדה חיצונית/ריקה — אין מה להחליף בעמדה א׳');  
- return;  
- }  
- const original = origRaw || posA.split(' (')[0].trim();  
- if (guards.indexOf(original) < 0) {  
- sw.getRange(2 + idx, 3).setValue(original);  
- sw.getRange(2 + idx, 5).setValue('⚠️ מקורי לא פנימי — לא ניתן להחליף');  
- return;  
- }  
- if (original === replacement) { sw.getRange(2 + idx, 5).setValue('ℹ️ זהה — דולג'); return; }  
-  
- const fr = parseInt(foundLabel.slice(0, 2), 10), to = parseInt(foundLabel.slice(6, 8), 10);  
- const blockHours = (to <= fr) ? (to + 24 - fr) : (to - fr);  
- let blockPoints = 0;  
- // בלוק לילה = מתחיל באחת משעות הלילה (22, 0, 2, 4). מזוהה לפי הטווח המאוחד בלוח.  
- const isNightBlk = (fr === 22 || fr === 0 || fr === 2 || fr === 4) && (to <= 6 || to === 0);  
- if (isNightBlk) {  
- // בשבת המשקל נקבע אחרת — אך בבלתם אין לנו marks; נשתמש במשקל לילה הקבוע כקירוב.  
- blockPoints = (cfg.weights['לילה'] || 3) * blockHours;  
- } else {  
- for (let h = fr; h < to; h++) {  
- blockPoints += blockWeight_(day, { label: ('0' + h).slice(-2) + ':00', night: false }, cfg.weights, cfg, null);  
- }  
- }  
-  
- sched.getRange(foundRow + 1, 2).setValue(replacement + ' (בלתם)').setBackground('#ffe599');  
- schedData[foundRow][1] = replacement + ' (בלתם)';  
-  
- points[original] -= blockPoints; points[replacement] += blockPoints;  
- hours[original] -= blockHours; hours[replacement] += blockHours;  
-  
- sw.getRange(2 + idx, 3).setValue(original);  
- sw.getRange(2 + idx, 5).setValue('✅');  
- sw.getRange(2 + idx, 6).setValue(original + ' → ' + replacement + ' (' + foundLabel + ', ' + blockHours + 'ש, ' + blockPoints + ' נק׳)');  
- done++;  
- });  
-  
- if (done === 0) { ui.alert('לא בוצעו תיקונים (בדוק התרעות בעמודת סטטוס)'); return; }  
-  
- updateScheduleSummary_(sched, guards, points, hours);  
- adjustLastHistory_(mgmt, guards, points);  
-  
- ui.alert('✅ בוצעו ' + done + ' תיקוני בלתם.\nהשעות והנקודות עודכנו בלוח, בסיכום ובהיסטוריה.');  
 }  
   
 function updateScheduleSummary_(sched, guards, dPoints, dHours) {  
