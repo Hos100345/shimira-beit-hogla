@@ -95,21 +95,16 @@ function isShabbat_(dayName, blockStartHour, cfg) {
 }  
   
 // חישוב משקל קושי לבלוק.  
-// בחול: משקל קבוע לפי סוג הבלוק (לילה/ערב/יום) — כמו V1 המקורי.  
-// בשבת: המשקלים הקבועים כבויים → המשקל = ממוצע הדירוג 1–5 של השומרים הזמינים.  
-// marksForBlock אופציונלי — נדרש רק לחישוב השבת. cfg אופציונלי — בלעדיו מתנהג כמו חול.  
 function blockWeight_(dayName, block, weights, cfg, marksForBlock) {  
  const h = parseInt(block.label.slice(0, 2), 10);  
   
- // שבת: משקל לפי דירוג השומרים בלבד  
  if (cfg && isShabbat_(dayName, h, cfg)) {  
  if (!marksForBlock || marksForBlock.length === 0) return 3;  
  const costs = marksForBlock.map(ratingToCost_).filter(c => isFinite(c));  
- if (costs.length === 0) return 3; // כולם חסומים  
+ if (costs.length === 0) return 3;  
  return costs.reduce((a, b) => a + b, 0) / costs.length;  
  }  
   
- // חול: משקל קבוע (לוגיקת V1 המקורית)  
  if (block.night) return weights['לילה'];  
  if (dayName === 'שבת') {  
  if (h >= 8 && h < 11) return weights['תפילות שבת'];  
@@ -154,27 +149,23 @@ function setupV2() {
  sh.setRightToLeft(true);  
  const rows = [
  ['פרמטר', 'ערך', 'הסבר'],
- // ── ⏱ זמני משמרות ומנוחה ──
  ['⏱ זמני משמרות ומנוחה', '', ''],
  ['MAX_SHIFT_LENGTH', 4, 'מקסימום שעות רצופות למשמרת אחת (ברירת מחדל: 4)'],
  ['MIN_SHIFT_LENGTH', 2, 'מינימום שעות רצופות לפני החלפת שומר (ברירת מחדל: 2)'],
  ['MIN_REST_TIME', 4, 'שעות מנוחה מינימליות בין שתי משמרות רגילות (ברירת מחדל: 4)'],
  ['NIGHT_REST_TIME', 8, 'שעות מנוחה חובה אחרי משמרת לילה (שעות קטנות, ברירת מחדל: 8)'],
  ['MAX_BACKTRACK_HOURS', 3, 'מספר השעות שהאלגוריתם חוזר אחורה כשנתקע במבוי סתום (ברירת מחדל: 3)'],
- // ── 📊 ניקוד ואיזון ──
  ['📊 ניקוד ואיזון', '', ''],
  ['MAX_WEEKDAY_DEBT_HOURS', 2, 'סף הפרש שעות שבועי בין שומרים; מעל הסף — האלגוריתם מאזן (ברירת מחדל: 2)'],
  ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות חסימה הצבורות השומר נשאר ירוק (פנוי לשיבוץ)'],
  ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות = רמזור צהוב; מעל זה = אדום (עמוס — ישובץ רק בהכרח)'],
  ['QUESTION_COST_FACTOR', 0.5, 'עלות "?" ביחס ל-"✕" (0.5 = חצי נקודה, 1.0 = שווה ל-✕)'],
  ['DEBT_SENSITIVITY', 2, 'כמה נקודות חוב מהשבוע הקודם מורידות את סף הרמזור של השומר'],
- // ── 📅 חלון שבת ──
  ['📅 חלון שבת', '', ''],
  ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון שבת/חג (ברירת מחדל: שישי)'],
  ['SHABBAT_START_HOUR', 6, 'שעת פתיחת חלון שבת ביום ההתחלה — פורמט 24 שעות (ברירת מחדל: 6)'],
  ['SHABBAT_END_DAY', 'ראשון', 'יום סיום חלון שבת/חג (ברירת מחדל: ראשון)'],
  ['SHABBAT_END_HOUR', 6, 'שעת סגירת חלון שבת ביום הסיום — פורמט 24 שעות (ברירת מחדל: 6)'],
- // ── 🔗 גיליונות מקושרים ──
  ['🔗 גיליונות מקושרים', '', ''],
  ['WEEK_START_DATE', '', 'תאריך יום ראשון של השבוע המשובץ; משמש לייבוא שומרים חיצוניים מהקובץ המשותף'],
  ['AVAIL_SPREADSHEET_ID', '', 'מזהה Google Sheets של קובץ הזמינות (ממולא אוטומטית ע"י createAvailabilityFile)'],
@@ -184,13 +175,12 @@ function setupV2() {
  sh.getRange(1, 1, rows.length, 3).setValues(rows);
  styleHeader_(sh.getRange(1, 1, 1, 3));
  sh.getRange(2, 2, rows.length - 1, 1).setBackground('#fff2cc');
- // עיצוב כותרות סעיפים: שורות 2, 8, 14, 19 (אינדקס 1-based בגיליון)
  [2, 8, 14, 19].forEach(r => {
    const hdr = sh.getRange(r, 1, 1, 3);
    hdr.setBackground('#f3f3f3').setFontWeight('bold');
-   sh.getRange(r, 2).setBackground('#f3f3f3'); // ביטול הצהוב לתאי ערך בשורת כותרת
+   sh.getRange(r, 2).setBackground('#f3f3f3');
  });
- sh.getRange(20, 2).setNumberFormat('dd/mm/yyyy'); // WEEK_START_DATE  
+ sh.getRange(20, 2).setNumberFormat('dd/mm/yyyy');  
   
  const w = [  
  ['סוג בלוק', 'משקל קושי'],  
@@ -221,7 +211,6 @@ function setupV2() {
  ex.getRange(1, 1, 1, 4).setValues([['תאריך', 'שומר 22:00-02:00', 'שותף 02:00-06:00 (מהישוב)', 'טווח שותף']]);  
  styleHeader_(ex.getRange(1, 1, 1, 4));  
  ex.getRange(2, 1, 31, 1).setNumberFormat('dd/mm/yyyy');  
- // dropdown לטווח השותף: מלא (02-06) או סיור (04-06). ריק = מלא.  
  const rangeRule = SpreadsheetApp.newDataValidation()  
  .requireValueInList(['02:00-06:00', '04:00-06:00'], true).setAllowInvalid(true).build();  
  ex.getRange(2, 4, 31, 1).setDataValidation(rangeRule);  
@@ -262,10 +251,8 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.setRightToLeft(true);
  const blocks = buildBlocks_();
  const numG = guards.length;
- // עמודות: יום | בלוק זמן | שעות | סטטוס | מינ שומרים | שומר1...שומרN | שיבוץ ידני | שיבוץ נוכחי
  const totalCols = 5 + numG + 2;
 
- // כותרת: יום | בלוק זמן | שעות | סטטוס | עמדות | שומר1..N | שיבוץ ידני | שיבוץ נוכחי
  sh.getRange(1, 1, 1, 5).setValues([['יום', 'בלוק זמן', 'שעות', 'סטטוס', 'עמדות']]);
  sh.getRange(1, 5).setNote('0 = שעה בוטלה\n1 = שומר אחד\n2 = שני שומרים');
  sh.getRange(1, 6, 1, numG).setValues([guards]);
@@ -277,7 +264,6 @@ function rebuildAvailabilityIn_(ss, guards) {
  const data = [];
  DAYS.forEach(day => blocks.forEach(b => {
    const status = b.external ? 'חיצוני בלבד' : 'פעיל';
-   // עמדות: שעות חיצוניות = 0 (מטופל ע"י גיליון חיצוניים), יתר = 1
    const positions = b.external ? 0 : 1;
    const row = [day, b.label, b.hours, status, positions];
    guards.forEach(() => row.push(MARK_FREE));
@@ -291,17 +277,14 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.setFrozenRows(2);
  sh.setFrozenColumns(2);
 
- // dropdown: סטטוס
  const statusRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['פעיל', 'חיצוני בלבד'], true).setAllowInvalid(false).build();
  sh.getRange(3, 4, data.length, 1).setDataValidation(statusRule);
 
- // dropdown: עמדות — 0=בוטל, 1=שומר אחד, 2=שני שומרים
  const posRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['0', '1', '2'], true).setAllowInvalid(false).build();
  sh.getRange(3, 5, data.length, 1).setDataValidation(posRule);
 
- // dropdown: זמינות שומרים
  const vxRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(false).build();
  const manualRule = SpreadsheetApp.newDataValidation()
@@ -309,7 +292,6 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.getRange(3, 6, data.length, numG).setDataValidation(vxRule);
  sh.getRange(3, 6 + numG, data.length, 1).setDataValidation(manualRule);
 
- // עיצוב תנאי: זמינות שומרים
  const marksRange = sh.getRange(3, 6, data.length, numG);
  const greenRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('1')
    .setBackground('#b7e1cd').setRanges([marksRange]).build();
@@ -319,7 +301,6 @@ function rebuildAvailabilityIn_(ss, guards) {
  const blockRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(MARK_BLOCK)
    .setBackground('#f4c7c3').setRanges([marksRange]).build();
 
- // עיצוב תנאי: עמדות 0=אפור, 2=תכלת
  const posRange = sh.getRange(3, 5, data.length, 1);
  const posZeroRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('0')
    .setBackground('#e0e0e0').setFontColor('#888888').setRanges([posRange]).build();
@@ -541,7 +522,6 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  const st = initState_(guards, mgmt, cfg);  
  const maxShift = maxShiftOverride || Number(cfg.MAX_SHIFT_LENGTH) || 4;  
   
- // סריקה מקדימה: שיבוצים ידניים  
  const futureManualHours = new Array(guards.length).fill(0);  
  rows.forEach(r => {  
  if (r.manual && r.manualIdx >= 0) futureManualHours[r.manualIdx] += r.hours;  
@@ -552,7 +532,6 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  while (i < rows.length) {  
  const r = rows[i];  
   
- // --- שיבוץ ידני ---  
  if (r.manual && r.manualIdx >= 0) {  
  const g = r.manualIdx;  
  decisions.push({ rowIdx: i, guard: g, mode: 'ידני', partner: r.partnerName || null });  
@@ -562,7 +541,6 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  continue;  
  }  
   
- // --- בלוק חיצוני מכוסה ---  
  if (r.external && r.covered) {  
  decisions.push({ rowIdx: i, guard: -1, mode: 'חיצוני', name: r.extName, partner: r.partnerName || null });  
  if (r.partnerIdx >= 0) { applyAssign_(st, r.partnerIdx, r); }  
@@ -570,26 +548,20 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  continue;  
  }  
   
- // --- בלוק שותף בלבד (ללא חיצוני) ---  
  if (!r.external && r.partnerName && !r.partnerIdx < 0) {  
- // שותף מחוץ לרשימה — לא חוסם ולא צובר שעות, רק מוצג  
  }  
   
- // --- מצב חיצוני בלבד (אין שיבוץ פנימי) ---  
  if (r.statusExternal) {  
  decisions.push({ rowIdx: i, guard: -1, mode: 'חיצוני', name: '—' });  
  i++;  
  continue;  
  }  
   
- // --- אלגוריתם רגיל ---  
- // אל תשבץ שומר שכבר שובץ לאותה שעה (עמדה ב׳)  
  const sameSlotExcluded = new Set(  
  decisions.filter(d => rows[d.rowIdx].sheetRow === r.sheetRow && d.guard >= 0).map(d => d.guard)  
  );  
  const g = chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, sameSlotExcluded);  
  if (g === -1) {  
- // חירום: נסה backtrack  
  const bt = backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter);  
  if (bt !== null) { i = bt; continue; }  
  decisions.push({ rowIdx: i, guard: -1, mode: 'ריק' });  
@@ -654,7 +626,6 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
   if (!sh) return;
   const syncCol = 7 + numG;
 
-  // אסוף שמות לכל שורה (כמה עמדות → שרשור)
   const byRow = {};
   decisions.forEach(d => {
     const r = rows[d.rowIdx];
@@ -666,7 +637,6 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
     if (name && !byRow[r.sheetRow].includes(name)) byRow[r.sheetRow].push(name);
   });
 
-  // נקה ועדכן
   const lastRow = sh.getLastRow();
   if (lastRow >= 3) sh.getRange(3, syncCol, lastRow - 2, 1).clearContent();
   Object.entries(byRow).forEach(([sheetRow, names]) => {
@@ -686,12 +656,10 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
   sh.setRightToLeft(true);
   const numG = guards.length;
 
-  // כותרת
   const headerVals = [['יום', 'שעות', 'עמדות', 'שובץ (נוכחי)'].concat(guards)];
   sh.getRange(1, 1, 1, 4 + numG).setValues(headerVals);
   styleHeader_(sh.getRange(1, 1, 1, 4 + numG));
 
-  // בנה מיפוי: sheetRow → רשימת שומרים שהוקצו
   const assignedByRow = {};
   decisions.forEach(d => {
     const r = rows[d.rowIdx];
@@ -708,10 +676,9 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
     }
   });
 
-  // שורות נתונים — שורה אחת לכל slot ייחודי (ללא כפילויות של עמדות)
   const seen = new Set();
   const dataRows = [];
-  const colorMatrix = []; // [row][col] = color
+  const colorMatrix = [];
 
   rows.forEach(r => {
     if (seen.has(r.sheetRow)) return;
@@ -724,20 +691,18 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
     const rowVals = [r.day, r.label, positions, assignedStr];
     const rowColors = ['#ffffff', '#ffffff', '#ffffff', '#ffffff'];
 
-    // צבע עמודת שיבוץ לפי מצב
     if (assigned.names.includes('🚨 ריק')) rowColors[3] = '#f4c7c3';
     else if (positions > 1 && assigned.names.length < positions) rowColors[3] = '#fce8b2';
 
-    // עמודות זמינות לכל שומר
     guards.forEach((_, g) => {
       const mark = String(r.marks[g] || '').trim() || '1';
       const wasAssigned = assigned.guards.includes(g);
       rowVals.push(mark);
       if (wasAssigned) {
-        if (mark === 'X') rowColors.push('#f4c7c3');       // שובץ למרות חסימה!
-        else if (parseInt(mark) >= 4) rowColors.push('#ffe5cc'); // שובץ בקושי גדול
-        else if (parseInt(mark) >= 3) rowColors.push('#fff2cc'); // שובץ בקושי בינוני
-        else rowColors.push('#d4edda');                         // שובץ בנוחות
+        if (mark === 'X') rowColors.push('#f4c7c3');
+        else if (parseInt(mark) >= 4) rowColors.push('#ffe5cc');
+        else if (parseInt(mark) >= 3) rowColors.push('#fff2cc');
+        else rowColors.push('#d4edda');
       } else {
         rowColors.push('#ffffff');
       }
@@ -750,18 +715,15 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
   if (dataRows.length === 0) return;
   sh.getRange(2, 1, dataRows.length, 4 + numG).setValues(dataRows);
 
-  // צביעה תא-תא
   colorMatrix.forEach((colors, ri) => {
     colors.forEach((color, ci) => {
       if (color !== '#ffffff') sh.getRange(2 + ri, 1 + ci).setBackground(color);
     });
   });
 
-  // מקרא
   sh.getRange(1, 4 + numG + 2).setValue('מקרא: 🟢 שובץ בנוחות | 🟡 שובץ בקושי | 🟠 קושי גדול | 🔴 שובץ למרות חסימה | 🟦 לא שובץ')
     .setFontColor('#555555').setFontSize(9).setFontStyle('italic');
 
-  // עיצוב
   sh.setFrozenRows(1);
   sh.setFrozenColumns(2);
   sh.setColumnWidth(1, 75);
@@ -792,12 +754,10 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  const mark = r.marks[g];  
  if (isBlocked_(mark)) return;  
   
- // בדיקות קיבולת וזמינות  
  if (s.hours >= hardCap) return;  
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;  
  if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
   
- // בדיקת רצף  
  const curRun = (s.lastEnd === r.startAbs) ? s.run : 0;  
  if (curRun >= maxShift) return;  
   
@@ -831,10 +791,8 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
 }  
   
 function getPartner_(guards, g, r, st, cfg) {  
- // שותף ישוב חיצוני שמוגדר בעמודת partnerName  
  if (r.partnerName) return r.partnerName;  
   
- // מוצא שומר פנימי להשלמת לילה  
  const rest = Number(cfg.MIN_REST_TIME) || 4;  
  let best = null, bestHours = Infinity;  
   
@@ -861,10 +819,8 @@ function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift
  if (r.startAbs < backLimit) break;  
  if (r.manual || r.statusExternal || (r.external && r.covered)) continue;  
   
- // נסה לשבץ מישהו אחר בבלוק הזה  
  const savedSt = JSON.parse(JSON.stringify(st));  
   
- // בטל את ההשמה הנוכחית  
  for (let k = j; k < decisions.length; k++) {  
  const kd = decisions[k];  
  const kr = rows[kd.rowIdx];  
@@ -884,10 +840,8 @@ function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift
  continue;  
  }  
   
- // הצלחנו — עדכן ומחק כל ההחלטות שאחרי j  
  decisions.splice(j);  
  Object.keys(savedSt).forEach(k => { if (k <= j) st[k] = savedSt[k]; });  
- // שחזר state עד j (לא כולל)  
  const cleanSt = initState_(guards);  
  decisions.forEach((dd, idx) => {  
  if (idx < j && dd.guard >= 0) applyAssign_(cleanSt, dd.guard, rows[dd.rowIdx]);  
@@ -962,7 +916,7 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
     const startAbs = absBase + bStart;
 
     const statusExternal = v[3] === 'חיצוני בלבד';
-    const positions = Number(v[4]) || 0; // 0=בוטל, 1=שומר א׳, 2=שני שומרים
+    const positions = Number(v[4]) || 0;
     const marks = guards.map((_, g) => v[5 + g]);
     const manual = guards[v[5 + numGuards]] !== undefined ? v[5 + numGuards] : '';
     const manualIdx = manual ? guards.indexOf(String(manual).trim()) : -1;
@@ -979,8 +933,6 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
     const weights = cfg ? readWeights_(mgmt) : { 'יום': 1, 'ערב': 2, 'לילה': 3, 'מוצ"ש': 2, 'תפילות שבת': 3 };
     const weight = blockWeight_(day, block, weights, cfg, marks);
 
-    // שעות חיצוניות — תמיד כלולות (לצורך הצגת חיצוני/כיסוי)
-    // שעות רגילות עם עמדות=0 — מבוטלות, לא נכנסות לשיבוץ
     if (!block.external && positions === 0) return;
 
     const posCount = block.external ? 1 : positions;
@@ -988,7 +940,7 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
       rows.push({
         day, label, dayIndex: dayIdx, startAbs, hours: block.hours,
         night: block.night, external: block.external,
-        marks, manual: !!manual, manualIdx,
+        marks, manual: !!manual && posIdx === 0, manualIdx: posIdx === 0 ? manualIdx : -1,
         covered, extName, partnerName, partnerRange, partnerIdx,
         statusExternal, positions, positionIdx: posIdx,
         isShabbat, weight,
@@ -1126,7 +1078,6 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  const dayDecisions = decisions.filter(d => rows[d.rowIdx].dayIndex === di);  
   
  const cells = [];  
- // ספור כמה פעמים מופיע כל label ביום הזה (לתיוג עמדה ב׳)  
  const labelCount = {};  
  dayDecisions.forEach(d => {  
  const lbl = rows[d.rowIdx].label;  
@@ -1166,7 +1117,7 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  sh.getRange(dayStart + ci, 3).setBackground(c[5]);  
  });  
  row += cells.length;  
- row++; // רווח  
+ row++;  
  });  
   
  sh.setColumnWidth(1, 130).setColumnWidth(2, 180).setColumnWidth(3, 200).setColumnWidth(4, 140);  
