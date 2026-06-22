@@ -19,8 +19,9 @@ const SHEET_AVAIL = '📋 זמינות'; // בגיליון הראשי
 const SHEET_SCHEDULE = '🗓️ לוח שמירות';  
 const SHEET_EXTERNAL = '📅 שומרים חיצוניים';  
 const SHEET_HISTORY = '📊 היסטוריה וחוב';  
-const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני  
-const SHEET_HELP = '📖 הוראות הפעלה';  
+const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
+const SHEET_HELP = '📖 הוראות הפעלה';
+const SHEET_MANAGER = '📊 מבט מנהל';  
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -138,6 +139,7 @@ function onOpen() {
  .addItem('📖 צור לשונית הוראות', 'createInstructionsSheet')  
  .addItem('🔄 אפס זמינות לשבוע חדש', 'resetAvailability')  
  .addItem('📥 עבד תגובות ממשק', 'loadInterfaceResponsesFromUI')
+    .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
     .addToUi();  
 }  
   
@@ -263,7 +265,9 @@ function rebuildAvailabilityIn_(ss, guards) {
  // עמודות: יום | בלוק זמן | שעות | סטטוס | מינ שומרים | שומר1...שומרN | שיבוץ ידני | שיבוץ נוכחי
  const totalCols = 5 + numG + 2;
 
- sh.getRange(1, 1, 1, 5).setValues([['יום', 'בלוק זמן', 'שעות', 'סטטוס', 'מינ\' שומרים']]);
+ // כותרת: יום | בלוק זמן | שעות | סטטוס | עמדות | שומר1..N | שיבוץ ידני | שיבוץ נוכחי
+ sh.getRange(1, 1, 1, 5).setValues([['יום', 'בלוק זמן', 'שעות', 'סטטוס', 'עמדות']]);
+ sh.getRange(1, 5).setNote('0 = שעה בוטלה\n1 = שומר אחד\n2 = שני שומרים');
  sh.getRange(1, 6, 1, numG).setValues([guards]);
  sh.getRange(1, 6 + numG).setValue('🔒 שיבוץ ידני');
  sh.getRange(1, 7 + numG).setValue('📅 שיבוץ נוכחי');
@@ -272,13 +276,14 @@ function rebuildAvailabilityIn_(ss, guards) {
 
  const data = [];
  DAYS.forEach(day => blocks.forEach(b => {
- const status = b.external ? 'חיצוני בלבד' : 'פעיל';
- const minG = b.external ? 0 : 1;
- const row = [day, b.label, b.hours, status, minG];
- guards.forEach(() => row.push(MARK_FREE));
- row.push('');
- row.push('');
- data.push(row);
+   const status = b.external ? 'חיצוני בלבד' : 'פעיל';
+   // עמדות: שעות חיצוניות = 0 (מטופל ע"י גיליון חיצוניים), יתר = 1
+   const positions = b.external ? 0 : 1;
+   const row = [day, b.label, b.hours, status, positions];
+   guards.forEach(() => row.push(MARK_FREE));
+   row.push('');
+   row.push('');
+   data.push(row);
  }));
  sh.getRange(3, 1, data.length, totalCols).setValues(data);
 
@@ -286,30 +291,46 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.setFrozenRows(2);
  sh.setFrozenColumns(2);
 
+ // dropdown: סטטוס
  const statusRule = SpreadsheetApp.newDataValidation()
- .requireValueInList(['פעיל', 'חיצוני בלבד'], true).setAllowInvalid(false).build();
+   .requireValueInList(['פעיל', 'חיצוני בלבד'], true).setAllowInvalid(false).build();
  sh.getRange(3, 4, data.length, 1).setDataValidation(statusRule);
 
+ // dropdown: עמדות — 0=בוטל, 1=שומר אחד, 2=שני שומרים
+ const posRule = SpreadsheetApp.newDataValidation()
+   .requireValueInList(['0', '1', '2'], true).setAllowInvalid(false).build();
+ sh.getRange(3, 5, data.length, 1).setDataValidation(posRule);
+
+ // dropdown: זמינות שומרים
  const vxRule = SpreadsheetApp.newDataValidation()
- .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(false).build();
+   .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(false).build();
  const manualRule = SpreadsheetApp.newDataValidation()
- .requireValueInList(guards, true).setAllowInvalid(false).build();
+   .requireValueInList(guards, true).setAllowInvalid(false).build();
  sh.getRange(3, 6, data.length, numG).setDataValidation(vxRule);
  sh.getRange(3, 6 + numG, data.length, 1).setDataValidation(manualRule);
 
+ // עיצוב תנאי: זמינות שומרים
  const marksRange = sh.getRange(3, 6, data.length, numG);
  const greenRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('1')
- .setBackground('#b7e1cd').setRanges([marksRange]).build();
- const yellowRule = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(VALUE(F3)),VALUE(F3)>=3,VALUE(F3)<=5)')
- .setBackground('#fce8b2').setRanges([marksRange]).build();
+   .setBackground('#b7e1cd').setRanges([marksRange]).build();
+ const yellowRule = SpreadsheetApp.newConditionalFormatRule()
+   .whenFormulaSatisfied('=AND(ISNUMBER(VALUE(F3)),VALUE(F3)>=3,VALUE(F3)<=5)')
+   .setBackground('#fce8b2').setRanges([marksRange]).build();
  const blockRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(MARK_BLOCK)
- .setBackground('#f4c7c3').setRanges([marksRange]).build();
- sh.setConditionalFormatRules([greenRule, yellowRule, blockRule]);
+   .setBackground('#f4c7c3').setRanges([marksRange]).build();
+
+ // עיצוב תנאי: עמדות 0=אפור, 2=תכלת
+ const posRange = sh.getRange(3, 5, data.length, 1);
+ const posZeroRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('0')
+   .setBackground('#e0e0e0').setFontColor('#888888').setRanges([posRange]).build();
+ const posTwoRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('2')
+   .setBackground('#cfe2f3').setRanges([posRange]).build();
+ sh.setConditionalFormatRules([greenRule, yellowRule, blockRule, posZeroRule, posTwoRule]);
 
  sh.setColumnWidths(1, 2, 95);
- sh.setColumnWidth(3, 60);
+ sh.setColumnWidth(3, 55);
  sh.setColumnWidth(4, 110);
- sh.setColumnWidth(5, 70);
+ sh.setColumnWidth(5, 65);
  sh.setColumnWidths(6, numG, 95);
  sh.setColumnWidth(6 + numG, 120);
  sh.setColumnWidth(7 + numG, 130);
@@ -562,7 +583,11 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  }  
   
  // --- אלגוריתם רגיל ---  
- const g = chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter);  
+ // אל תשבץ שומר שכבר שובץ לאותה שעה (עמדה ב׳)  
+ const sameSlotExcluded = new Set(  
+ decisions.filter(d => rows[d.rowIdx].sheetRow === r.sheetRow && d.guard >= 0).map(d => d.guard)  
+ );  
+ const g = chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, sameSlotExcluded);  
  if (g === -1) {  
  // חירום: נסה backtrack  
  const bt = backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter);  
@@ -609,6 +634,7 @@ function writeScheduleResult_(mgmt, guards, plan) {
   
  writeSchedule_(mgmt, rows, decisions, guards, st);
  syncCurrentSchedule_(mgmt, guards, rows, decisions);
+ buildManagerView_(mgmt, guards, rows, decisions);
  writeHistory_(mgmt, guards, st);  
  const pubUrl = publishSchedule_(mgmt);  
   
@@ -627,21 +653,124 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
   const sh = mgmt.getSheetByName(SHEET_AVAIL);
   if (!sh) return;
   const syncCol = 7 + numG;
-  const lastDataRow = 2 + rows.length;
-  if (lastDataRow >= 3) sh.getRange(3, syncCol, lastDataRow - 2, 1).clearContent();
+
+  // אסוף שמות לכל שורה (כמה עמדות → שרשור)
+  const byRow = {};
   decisions.forEach(d => {
     const r = rows[d.rowIdx];
     let name = '';
-    if (d.mode === 'חיצוני' || d.mode === 'שותף') {
-      name = d.name || '';
-    } else if (d.guard >= 0) {
-      name = guards[d.guard];
-    } else {
-      name = '🚨 ריק';
-    }
-    sh.getRange(r.sheetRow, syncCol).setValue(name);
+    if (d.mode === 'חיצוני' || d.mode === 'שותף') name = d.name || '';
+    else if (d.guard >= 0) name = guards[d.guard];
+    else name = '🚨 ריק';
+    if (!byRow[r.sheetRow]) byRow[r.sheetRow] = [];
+    if (name && !byRow[r.sheetRow].includes(name)) byRow[r.sheetRow].push(name);
+  });
+
+  // נקה ועדכן
+  const lastRow = sh.getLastRow();
+  if (lastRow >= 3) sh.getRange(3, syncCol, lastRow - 2, 1).clearContent();
+  Object.entries(byRow).forEach(([sheetRow, names]) => {
+    sh.getRange(Number(sheetRow), syncCol).setValue(names.join(' / '));
   });
 }
+
+/* ============================================================
+ * מבט מנהל — מה ביקשו + מה שובץ + חריגות
+ * ============================================================ */
+function rebuildManagerViewFromMenu() {
+  SpreadsheetApp.getUi().alert('מבט מנהל מתעדכן רק בעת ריצת שיבוץ (▶️ הרץ שיבוץ).');
+}
+
+function buildManagerView_(mgmt, guards, rows, decisions) {
+  const sh = getCleanSheet_(mgmt, SHEET_MANAGER);
+  sh.setRightToLeft(true);
+  const numG = guards.length;
+
+  // כותרת
+  const headerVals = [['יום', 'שעות', 'עמדות', 'שובץ (נוכחי)'].concat(guards)];
+  sh.getRange(1, 1, 1, 4 + numG).setValues(headerVals);
+  styleHeader_(sh.getRange(1, 1, 1, 4 + numG));
+
+  // בנה מיפוי: sheetRow → רשימת שומרים שהוקצו
+  const assignedByRow = {};
+  decisions.forEach(d => {
+    const r = rows[d.rowIdx];
+    let name = '';
+    if (d.mode === 'חיצוני' || d.mode === 'שותף') name = d.name || '—';
+    else if (d.guard >= 0) name = guards[d.guard];
+    else name = '🚨 ריק';
+    if (!assignedByRow[r.sheetRow]) assignedByRow[r.sheetRow] = { names: [], guards: [] };
+    if (name && !assignedByRow[r.sheetRow].names.includes(name)) {
+      assignedByRow[r.sheetRow].names.push(name);
+    }
+    if (d.guard >= 0 && !assignedByRow[r.sheetRow].guards.includes(d.guard)) {
+      assignedByRow[r.sheetRow].guards.push(d.guard);
+    }
+  });
+
+  // שורות נתונים — שורה אחת לכל slot ייחודי (ללא כפילויות של עמדות)
+  const seen = new Set();
+  const dataRows = [];
+  const colorMatrix = []; // [row][col] = color
+
+  rows.forEach(r => {
+    if (seen.has(r.sheetRow)) return;
+    seen.add(r.sheetRow);
+
+    const assigned = assignedByRow[r.sheetRow] || { names: [], guards: [] };
+    const assignedStr = assigned.names.join(' / ') || '—';
+    const positions = r.positions || 1;
+
+    const rowVals = [r.day, r.label, positions, assignedStr];
+    const rowColors = ['#ffffff', '#ffffff', '#ffffff', '#ffffff'];
+
+    // צבע עמודת שיבוץ לפי מצב
+    if (assigned.names.includes('🚨 ריק')) rowColors[3] = '#f4c7c3';
+    else if (positions > 1 && assigned.names.length < positions) rowColors[3] = '#fce8b2';
+
+    // עמודות זמינות לכל שומר
+    guards.forEach((_, g) => {
+      const mark = String(r.marks[g] || '').trim() || '1';
+      const wasAssigned = assigned.guards.includes(g);
+      rowVals.push(mark);
+      if (wasAssigned) {
+        if (mark === 'X') rowColors.push('#f4c7c3');       // שובץ למרות חסימה!
+        else if (parseInt(mark) >= 4) rowColors.push('#ffe5cc'); // שובץ בקושי גדול
+        else if (parseInt(mark) >= 3) rowColors.push('#fff2cc'); // שובץ בקושי בינוני
+        else rowColors.push('#d4edda');                         // שובץ בנוחות
+      } else {
+        rowColors.push('#ffffff');
+      }
+    });
+
+    dataRows.push(rowVals);
+    colorMatrix.push(rowColors);
+  });
+
+  if (dataRows.length === 0) return;
+  sh.getRange(2, 1, dataRows.length, 4 + numG).setValues(dataRows);
+
+  // צביעה תא-תא
+  colorMatrix.forEach((colors, ri) => {
+    colors.forEach((color, ci) => {
+      if (color !== '#ffffff') sh.getRange(2 + ri, 1 + ci).setBackground(color);
+    });
+  });
+
+  // מקרא
+  sh.getRange(1, 4 + numG + 2).setValue('מקרא: 🟢 שובץ בנוחות | 🟡 שובץ בקושי | 🟠 קושי גדול | 🔴 שובץ למרות חסימה | 🟦 לא שובץ')
+    .setFontColor('#555555').setFontSize(9).setFontStyle('italic');
+
+  // עיצוב
+  sh.setFrozenRows(1);
+  sh.setFrozenColumns(2);
+  sh.setColumnWidth(1, 75);
+  sh.setColumnWidth(2, 110);
+  sh.setColumnWidth(3, 60);
+  sh.setColumnWidth(4, 160);
+  sh.setColumnWidths(5, numG, 85);
+}
+
 
 function applyAssign_(st, g, r) {  
  const s = st[g];  
@@ -653,10 +782,12 @@ function applyAssign_(st, g, r) {
  s.lastNight = r.night || (s.lastNight && s.run > r.hours);  
 }  
   
-function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter) {  
+function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded) {  
  const candidates = [];  
+ const excl = excluded || new Set();  
   
  guards.forEach((name, g) => {  
+ if (excl.has(g)) return;  
  const s = st[g];  
  const mark = r.marks[g];  
  if (isBlocked_(mark)) return;  
@@ -831,7 +962,7 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
     const startAbs = absBase + bStart;
 
     const statusExternal = v[3] === 'חיצוני בלבד';
-    const minGuards = Number(v[4]) || 0;
+    const positions = Number(v[4]) || 0; // 0=בוטל, 1=שומר א׳, 2=שני שומרים
     const marks = guards.map((_, g) => v[5 + g]);
     const manual = guards[v[5 + numGuards]] !== undefined ? v[5 + numGuards] : '';
     const manualIdx = manual ? guards.indexOf(String(manual).trim()) : -1;
@@ -848,15 +979,22 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
     const weights = cfg ? readWeights_(mgmt) : { 'יום': 1, 'ערב': 2, 'לילה': 3, 'מוצ"ש': 2, 'תפילות שבת': 3 };
     const weight = blockWeight_(day, block, weights, cfg, marks);
 
-    rows.push({
-      day, label, dayIndex: dayIdx, startAbs, hours: block.hours,
-      night: block.night, external: block.external,
-      marks, manual: !!manual, manualIdx,
-      covered, extName, partnerName, partnerRange, partnerIdx,
-      statusExternal, minGuards,
-      isShabbat, weight,
-      sheetRow: 3 + idx,
-    });
+    // שעות חיצוניות — תמיד כלולות (לצורך הצגת חיצוני/כיסוי)
+    // שעות רגילות עם עמדות=0 — מבוטלות, לא נכנסות לשיבוץ
+    if (!block.external && positions === 0) return;
+
+    const posCount = block.external ? 1 : positions;
+    for (let posIdx = 0; posIdx < posCount; posIdx++) {
+      rows.push({
+        day, label, dayIndex: dayIdx, startAbs, hours: block.hours,
+        night: block.night, external: block.external,
+        marks, manual: !!manual, manualIdx,
+        covered, extName, partnerName, partnerRange, partnerIdx,
+        statusExternal, positions, positionIdx: posIdx,
+        isShabbat, weight,
+        sheetRow: 3 + idx,
+      });
+    }
   });
 
   return rows;
@@ -988,8 +1126,18 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  const dayDecisions = decisions.filter(d => rows[d.rowIdx].dayIndex === di);  
   
  const cells = [];  
+ // ספור כמה פעמים מופיע כל label ביום הזה (לתיוג עמדה ב׳)  
+ const labelCount = {};  
+ dayDecisions.forEach(d => {  
+ const lbl = rows[d.rowIdx].label;  
+ labelCount[lbl] = (labelCount[lbl] || 0) + 1;  
+ });  
+ const labelSeen = {};  
  dayDecisions.forEach(d => {  
  const r = rows[d.rowIdx];  
+ labelSeen[r.label] = (labelSeen[r.label] || 0) + 1;  
+ const isSecond = labelCount[r.label] > 1 && labelSeen[r.label] > 1;  
+ const displayLabel = isSecond ? '↳ עמ׳ ב׳' : r.label;  
  let posA, posB, status, cA = '#ffffff', cB = '#ffffff';  
   
  if (d.mode === 'חיצוני') {  
@@ -1008,7 +1156,7 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  else { status = '✅ תקין'; }  
  }  
   
- cells.push([r.label, posA, posB, status, cA, cB]);  
+ cells.push([displayLabel, posA, posB, status, cA, cB]);  
  });  
   
  if (cells.length === 0) { row++; return; }  
