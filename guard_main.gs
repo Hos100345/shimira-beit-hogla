@@ -1356,25 +1356,27 @@ function saveGuardPreferences(payload) {
 
     function getMarkForBlock(di, blockLabel) {
       const bStart = parseInt(blockLabel.slice(0, 2), 10);
-      const bEnd = parseInt(blockLabel.slice(6, 8), 10) || 24;
+      const bEnd = parseInt(blockLabel.slice(6, 8), 10); // 0 = חצות (לולאה while תטפל נכון)
       const dayData = days[String(di)];
       if (!dayData) return MARK_FREE;
       const allSlots = {};
       Object.values(dayData).forEach(bg => { if (bg && bg.slots) Object.assign(allSlots, bg.slots); });
       let worst = MARK_FREE;
-      for (let h = bStart; h < bEnd && h < 24; h++) {
-        const key = ("0" + h).slice(-2) + ":00-" + ("0" + (h + 1)).slice(-2) + ":00";
+      let h = bStart;
+      while (h !== bEnd) {
+        const nextH = (h + 1) % 24;
+        const key = ("0" + h).slice(-2) + ":00-" + ("0" + nextH).slice(-2) + ":00";
         const m = String(allSlots[key] || MARK_FREE).trim().toUpperCase();
         if (m === MARK_BLOCK) { worst = MARK_BLOCK; break; }
         const nm = parseInt(m, 10) || 1;
         const nw = parseInt(worst, 10) || 1;
         if (nm > nw) worst = String(nm);
+        h = nextH;
       }
       return worst;
     }
 
     blocks.forEach((b, bi) => {
-      if (b.external) return;
       for (let di = 0; di < DAYS.length; di++) {
         sh.getRange(3 + di * blocks.length + bi, sheetCol).setValue(getMarkForBlock(di, b.label));
       }

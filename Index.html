@@ -32,13 +32,14 @@
   .sub{color:#AEB8CD;font-size:14px;margin-top:2px}
 
   .quick-actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
-  .week-filter{display:flex;gap:6px;margin-top:10px}
-  .wf-btn{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#AEB8CD;font-family:"Assistant";font-weight:600;font-size:12.5px;padding:6px 0;border-radius:9px;cursor:pointer;text-align:center;transition:all .15s}
-  .wf-btn.active{background:var(--lamp);border-color:var(--lamp);color:var(--ink)}
   .btn-action{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:"Assistant";font-weight:600;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px}
   .btn-action:hover{background:rgba(255,255,255,0.15);border-color:var(--lamp)}
   .btn-action.primary{background:rgba(232,163,61,0.15);border-color:var(--lamp);color:var(--lamp)}
   .btn-action.primary:hover{background:var(--lamp);color:var(--ink)}
+
+  .week-filter{display:flex;gap:6px;margin-top:10px}
+  .wf-btn{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#AEB8CD;font-family:"Assistant";font-weight:600;font-size:12.5px;padding:6px 0;border-radius:9px;cursor:pointer;text-align:center;transition:all .15s}
+  .wf-btn.active{background:var(--lamp);border-color:var(--lamp);color:var(--ink)}
 
   .import-zone{background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.2);border-radius:14px;padding:14px;margin-top:14px;display:none}
   .import-zone.show{display:block}
@@ -87,14 +88,6 @@
   .detail-toggle:hover{border-color:var(--lamp);color:var(--lamp-deep)}
   .detail-toggle.on{background:#FBF1DC;border-color:#E6C988;color:var(--lamp-deep)}
 
-  .fast-fill-group{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  .btn-fast{flex:1;min-width:75px;background:#fff;border:1px solid var(--paper-line);border-radius:8px;padding:8px 4px;font-family:"Assistant";font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.15s}
-  .btn-fast:hover{border-color:var(--lamp);background:#FFFBF5}
-  .btn-fast.v1{color:var(--l1)}
-  .btn-fast.v2{color:var(--l2)}
-  .btn-fast.v3{color:var(--l3)}
-  .btn-fast.vx{color:var(--mute)}
-
   .picker{display:flex;gap:5px;margin-top:10px}
   .seg{flex:1;min-width:0;border:1px solid var(--paper-line);background:#fff;border-radius:10px;padding:9px 0;cursor:pointer;font-family:"Rubik";font-weight:600;font-size:15px;color:var(--text-soft);display:grid;place-items:center;transition:all .15s;-webkit-tap-highlight-color:transparent}
   .seg:active{transform:scale(.94)}
@@ -106,6 +99,8 @@
   .seg.sel[data-v="x"]{background:var(--lx)}
   .seg.sel{color:#fff;border-color:transparent;box-shadow:0 3px 8px rgba(0,0,0,.15)}
   .seg.sel .cap{color:rgba(255,255,255,.85)}
+  .seg.def[data-v="1"]{background:#E4F0E8;color:var(--l1);border:1.5px dashed var(--l1);box-shadow:none}
+  .seg.def[data-v="1"] .cap{color:var(--l1);opacity:.8}
 
   .slots{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:0;opacity:0;overflow:hidden;transition:all 0.3s ease}
   .slots.open{max-height:1500px;opacity:1;margin-bottom:6px}
@@ -118,15 +113,15 @@
 
   .hint{font-size:12px;color:var(--text-soft);margin-top:4px;text-align:center}
 
-  .summary-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:20px;margin-top:24px;}
-  .summary-title{font-family:"Rubik";font-weight:700;font-size:17px;color:#fff;margin-bottom:14px;display:flex;align-items:center;justify-content:between}
-  .btn-copy{margin-inline-start:auto;background:var(--lamp);color:#241a06;border:0;padding:6px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;box-shadow:0 4px 10px rgba(232,163,61,0.2)}
+  .summary-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:20px;margin-top:24px}
+  .summary-title{font-family:"Rubik";font-weight:700;font-size:17px;color:#fff;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+  .btn-copy{background:var(--lamp);color:#241a06;border:0;padding:6px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;box-shadow:0 4px 10px rgba(232,163,61,0.2)}
   .btn-copy:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(232,163,61,0.3)}
 
   .summary-grid{display:grid;gap:10px;grid-template-columns:1fr}
   @media(min-width:480px){.summary-grid{grid-template-columns:1fr 1fr}}
 
-  .sum-item{background:var(--paper);border:1px solid var(--paper-line);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:between;gap:10px;box-shadow:0 2px 5px rgba(0,0,0,0.05)}
+  .sum-item{background:var(--paper);border:1px solid var(--paper-line);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 5px rgba(0,0,0,0.05)}
   .sum-day{font-family:"Rubik";font-weight:600;font-size:14px;color:var(--text)}
   .sum-time{font-size:13px;color:var(--text-soft);display:block;margin-top:1px}
   .sum-badge{padding:4px 10px;border-radius:8px;color:#fff;font-weight:600;font-size:12px;white-space:nowrap;text-align:center}
@@ -140,7 +135,6 @@
   .progress b{color:#fff;font-family:"Rubik"}
   .send{flex:0 0 auto;border:0;cursor:pointer;font-family:"Rubik";font-weight:600;font-size:15px;color:#241a06;background:linear-gradient(180deg,#F4BA55,var(--lamp));border-radius:14px;padding:13px 22px;box-shadow:0 6px 18px rgba(232,163,61,.4);transition:transform .08s, box-shadow .2s}
   .send:hover{box-shadow:0 8px 22px rgba(232,163,61,.55)}
-  .send:disabled{opacity:0.6;cursor:not-allowed}
 
   .toast{position:fixed;inset:0;z-index:40;display:none;background:rgba(11,18,35,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:20px}
   .toast.show{display:flex}
@@ -150,16 +144,18 @@
 </style>
 </head>
 <body>
+
 <header>
   <div class="wrap">
     <div class="eyebrow">בית חוגלה · שמירת הישוב</div>
-    <div class="title">זינות לשמירה</div>
+    <div class="title">זמינות לשמירה</div>
     <div class="sub" id="weekLabel">השבוע הקרוב</div>
 
     <div class="quick-actions">
       <button type="button" class="btn-action" onclick="toggleImportZone(event)">📥 הדבק סיכום מוכן</button>
-      <button type="button" class="btn-action primary" onclick="loadPreviousWeek(event)">📅 טען זמינות משבוע שעבר</button>
+      <button type="button" class="btn-action primary" id="historyBtn" style="display:none;" onclick="loadPreviousWeek(event)">📅 טען זמינות משבוע שעבר</button>
     </div>
+
     <div class="week-filter">
       <button type="button" class="wf-btn active" data-filter="all" onclick="setWeekFilter('all',this)">שבוע מלא</button>
       <button type="button" class="wf-btn" data-filter="weekdays" onclick="setWeekFilter('weekdays',this)">ימי חול</button>
@@ -167,7 +163,7 @@
     </div>
 
     <div class="import-zone" id="importZone">
-      <textarea id="importText" placeholder="הדבק כאן את טקסט הסיכום ששמרת או שקיבלת (לדוגמה: • יום ראשון | שעות 02:00-04:00 ← ✕ לא יכול)..."></textarea>
+      <textarea id="importText" placeholder="הדבק כאן את טקסט הסיכום ששמרת או שקיבלת (לדוגמה: • יום ראשון | שעות 22:00-02:00 ← ✕ לא יכול)..."></textarea>
       <div class="import-btn-group">
         <button type="button" class="btn-sm cancel" onclick="toggleImportZone(event)">ביטול</button>
         <button type="button" class="btn-sm apply" onclick="processImportText(event)">טען טקסט לטופס</button>
@@ -177,7 +173,7 @@
     <div class="greet">
       <div class="lamp"></div>
       <div>
-        <b>שלום, <?= guardName ?></b>
+        <b id="guardDisplay">שלום</b>
         <span>מלא את העדיפויות שלך לשבוע</span>
       </div>
     </div>
@@ -190,9 +186,9 @@
     <span class="scale">
       <span class="dot" style="background:var(--l1)"></span>
       <span class="dot" style="background:var(--l2)"></span>
-      <span class="dot" style="background:var(--l)"></span>
+      <span class="dot" style="background:var(--l3)"></span>
     </span>
-    <span>1 = מתאים ½ 2 = שנייה · 3 = נ מחרון (הוא שמורן)</span>
+    <span>1 = מתאים · 2 = שנייה · 3 = אחרון</span>
     <span style="display:flex;align-items:center;gap:5px"><span class="x">✕</span> לא יכול</span>
   </div>
 
@@ -201,18 +197,18 @@
 
   <div class="summary-card" id="summaryCard">
     <div class="summary-title">
-      <span>📋 ריוז  השינויים והחסימות שלך</span>
+      <span>📋 ריכוז השינויים והחסימות שלך</span>
       <button type="button" class="btn-copy" onclick="copySummaryText(event)">🗐 העתק סיכום</button>
     </div>
     <div class="summary-grid" id="summaryGrid"></div>
   </div>
 
-  <div class="note">בלוק "תושב הישוב" (22:00–02:00) — סמן זמינות רק אם אתה משמש גם כשומר חיצוני.</div>
+  <div class="note">היממה בטופס מותאמת לסבב השמירה ומחושבת החל מ-06:00 בבוקר ועד 06:00 למחרת.</div>
 </div>
 
 <div class="bar">
   <div class="bar-inner">
-    <div class="progress">שינית <b id="filled">0</b> מתוך <b id="total">0</b> משמרות · השאר עדיפות 1</div>
+    <div class="progress">שינית <b id="filled">0</b> מתוך <b id="total">0</b> · השאר נשאר עדיפות 1</div>
     <button type="button" class="send" id="sendBtn" onclick="submitForm(event)">שליחת הזמינות</button>
   </div>
 </div>
@@ -242,18 +238,30 @@
 
   function hourSlots(startH, endH){
     const out = [];
-    for(let h = startH; h < endH; h++){
-      out.push(("0"+h).slice(-2)+":00-"+("0"+(h+1)).slice(-2)+":00");
+    let h = startH;
+    while (h !== endH) {
+      const nextH = (h + 1) % 24;
+      out.push(("0"+h).slice(-2)+":00-"+("0"+nextH).slice(-2)+":00");
+      h = nextH;
     }
     return out;
   }
+
   const BLOCKS = [
-    {key:"morning",  label:"בוקר",          time:"06:00-14:00", slots:hourSlots(6,14)},
-    {key:"evening",  label:"ערב",            time:"14:00-22:00", slots:hourSlots(14,22)},
-    {key:"external", label:"תושב הישוב",    time:"22:00-02:00", slots:["22:00-23:00","23:00-00:00","00:00-01:00","01:00-02:00"]},
-    {key:"night",    label:"לילה",           time:"02:00-06:00", slots:hourSlots(2,6)},
+    {key:"morning",    label:"בוקר",       time:"06:00-14:00", slots:hourSlots(6,14)},
+    {key:"evening",    label:"ערב",         time:"14:00-22:00", slots:hourSlots(14,22)},
+    {key:"night_shift",label:"שמירת לילה", time:"22:00-02:00", slots:hourSlots(22,2)},
+    {key:"night",      label:"לפנות בוקר", time:"02:00-06:00", slots:hourSlots(2,6)},
   ];
 
+  // סדר כרונולוגי של יום השמירה: 06:00 → 06:00 למחרת
+  const VILLAGE_HOURS_ORDER = [
+    "06:00-07:00","07:00-08:00","08:00-09:00","09:00-10:00","10:00-11:00","11:00-12:00","12:00-13:00","13:00-14:00",
+    "14:00-15:00","15:00-16:00","16:00-17:00","17:00-18:00","18:00-19:00","19:00-20:00","20:00-21:00","21:00-22:00",
+    "22:00-23:00","23:00-00:00","00:00-01:00","01:00-02:00","02:00-03:00","03:00-04:00","04:00-05:00","05:00-06:00"
+  ];
+
+  const LEVELS = [{v:"1",cap:"מתאים"}, {v:"2",cap:"שנייה"}, {v:"3",cap:"אחרון"}];
   let state = {};
   let weekFilter = sessionStorage.getItem('wf') || 'all';
 
@@ -266,7 +274,7 @@
       const hide = (f === 'weekdays' && idx >= 5) || (f === 'weekend' && idx < 5);
       el.style.display = hide ? 'none' : '';
     });
-    updateCounter();
+    updateProgress();
   }
 
   function applyStoredFilter(){
@@ -276,9 +284,11 @@
 
   function pickerHtml(path){
     let h = '<div class="picker" data-path="'+path+'">';
-    h += '<button type="button" class="seg sel" data-v="1" onclick="setVal(event,this)">1<span class="cap">מתאים</span></button>';
-    h += '<button type="button" class="seg" data-v="2" onclick="setVal(event,this)">2<span class="cap">שנייה</span></button>';
-    h += '<button type="button" class="seg" data-v="3" onclick="setVal(event,this)">3<span class="cap">אחרון</span></button>';
+    LEVELS.forEach(l=>{
+      const defClass = l.v === "1" ? " sel def" : "";
+      h += '<button type="button" class="seg'+defClass+'" data-v="'+l.v+'" onclick="setVal(event,this)">'+l.v+
+           (l.cap?'<span class="cap">'+l.cap+'</span>':'')+'</button>';
+    });
     h += '<button type="button" class="seg x" data-v="x" onclick="setVal(event,this)">✕</button>';
     h += '</div>';
     return h;
@@ -286,32 +296,21 @@
 
   function blockHtml(base, b, isGlobal){
     const path = base+"."+b.key;
-    const fastFillHtml = isGlobal ? `
-      <div class="fast-fill-group">
-        <button type="button" class="btn-fast v1" onclick="fastFillGlobal('${b.key}','1')">מלא 1 לכל השבוע</button>
-        <button type="button" class="btn-fast v2" onclick="fastFillGlobal('${b.key}','2')">מלא 2 לכל השבוע</button>
-        <button type="button" class="btn-fast v3" onclick="fastFillGlobal('${b.key}','3')">מלא 3 לכל השבוע</button>
-        <button type="button" class="btn-fast vx" onclick="fastFillGlobal('${b.key}','x')">מלא ✕ לכל השבוע</button>
-      </div>` : pickerHtml(path);
-
     return '<div class="block">'+
       '<div class="block-top">'+
         '<span class="block-label">'+b.label+'</span>'+
         '<span class="block-time">'+b.time+'</span>'+
         '<button type="button" class="detail-toggle" onclick="toggleDetail(event,this,\''+path+'\')">פרט שעות</button>'+
       '</div>'+
-      fastFillHtml+
+      pickerHtml(path)+
       '<div class="slots" data-slots="'+path+'">'+
         b.slots.map(s=>(
           '<div class="slot"><span class="slot-time">'+s+'</span>'+pickerHtml(path+"::"+s)+'</div>'
         )).join('')+
-        '<div class="hint">'+
-          (isGlobal ? 'מגדיר את משמרת זו לכל ימי השבוע בבת אחת.' : 'שינוי כאן דורס את הבחירה הכללית.')+
-        '</div>'+
+        '<div class="hint">'+(isGlobal ? 'חל על כל השבוע.' : 'דורס את הבחירה הכללית.')+'</div>'+
       '</div>'+
     '</div>';
   }
-
 
   function buildGlobal(){
     const root = document.getElementById("globalPanel");
@@ -319,10 +318,10 @@
     const card = document.createElement("div");
     card.className = "day global-card open";
     let html = '<div class="day-head">'+
-        '<span class="day-name">החל על כל השבוע בבת אחת (הגדרה מהירה)</span>'+
-        '<span class="global-badge">מילוי גלובלי</span>'+
+        '<span class="day-name">החל על כל השבוע (מומלץ להתחיל כאן)</span>'+
+        '<span class="global-badge">הגדרה מהירה</span>'+
       '</div>'+
-      '<div class="global-sub">בחר משמרת שלמה כדי להחיל אותה מיידית על כל ימי השבוע. לאחר מכן תוכל לתקן נקודתית בימים.</div>'+
+      '<div class="global-sub">מה שתסמן פה יועתק אוטומטית לכל הימים. אחרי זה תוכל לפתוח יום ספציפי למטה ולתקן נקודתית.</div>'+
       '<div class="day-body" style="max-height:3000px;">';
     BLOCKS.forEach(b=>{ html += blockHtml("all", b, true); });
     html += '</div>';
@@ -346,14 +345,7 @@
                  '<span class="day-date">'+d.date+'</span>'+
                  (d.shab?'<span class="shab">'+d.shab+'</span>':'')+
                  '</div>'+
-                 '<div class="day-body">'+
-                 '<div style="padding:10px 16px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
-                   '<span style="font-size:13px;font-weight:600;">מלאי יום זה:</span>'+
-                   '<button type="button" class="btn-fast v1" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'1\')">רמה 1</button>'+
-                   '<button type="button" class="btn-fast v2" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'2\')">רמה 2</button>'+
-                   '<button type="button" class="btn-fast v3" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'3\')">רמה 3</button>'+
-                   '<button type="button" class="btn-fast vx" style="flex:none;padding:4px 10px;" onclick="fastFillDay('+di+',\'x\')">רמה ✕</button>'+
-                 '</div>';
+                 '<div class="day-body">';
 
       BLOCKS.forEach(b=>{
         state[di][b.key] = {level:"1", slots:{}};
@@ -364,12 +356,12 @@
       card.innerHTML = html;
       root.appendChild(card);
     });
+    checkHistoryAvailability();
     updateProgress();
   }
 
   function toggleDayAccordion(event, headElement) {
-    if(event.target.closest('.picker') || event.target.closest('.detail-toggle') ||
-       event.target.closest('.seg') || event.target.closest('.btn-fast')) return;
+    if(event.target.closest('.picker') || event.target.closest('.detail-toggle') || event.target.closest('.seg')) return;
     const card = headElement.parentElement;
     const isOpen = card.classList.contains("open");
     document.querySelectorAll(".day:not(.global-card)").forEach(c => { if(c !== card) c.classList.remove("open"); });
@@ -378,7 +370,7 @@
 
   function selectInPicker(picker, v){
     if(!picker) return;
-    picker.querySelectorAll(".seg").forEach(s=>s.classList.remove("sel"));
+    picker.querySelectorAll(".seg").forEach(s=>s.classList.remove("sel","def"));
     const target = picker.querySelector('.seg[data-v="'+v+'"]');
     if(target) target.classList.add("sel");
   }
@@ -399,37 +391,29 @@
     syncDayPicker(di + "." + bk, state[di][bk].level);
   }
 
-  function fastFillGlobal(bk, v) {
+  function applyToAllDays(bk, v, slot){
     for(let di=0; di<DAYS.length; di++){
-      state[di][bk].level = v;
-      syncDayPicker(di+"."+bk, v);
-      const blockConfig = BLOCKS.find(b => b.key === bk);
-      if(blockConfig) {
-        blockConfig.slots.forEach(s => {
-          state[di][bk].slots[s] = v;
-          syncDayPicker(di+"."+bk+"::"+s, v);
-        });
+      if(slot){
+        state[di][bk].slots[slot] = v;
+        syncDayPicker(di+"."+bk+"::"+slot, v);
+        checkAndUpdateBlockHeader(di, bk);
+      } else {
+        state[di][bk].level = v;
+        syncDayPicker(di+"."+bk, v);
+        const blockConfig = BLOCKS.find(b => b.key === bk);
+        if(blockConfig){
+          blockConfig.slots.forEach(s => {
+            state[di][bk].slots[s] = v;
+            syncDayPicker(di+"."+bk+"::"+s, v);
+          });
+        }
       }
     }
-    const blockGlobal = BLOCKS.find(b => b.key === bk);
-    if(blockGlobal) blockGlobal.slots.forEach(s => syncDayPicker("all."+bk+"::"+s, v));
-    updateProgress();
-  }
-
-  function fastFillDay(di, v) {
-    BLOCKS.forEach(b => {
-      state[di][b.key].level = v;
-      syncDayPicker(di+"."+b.key, v);
-      b.slots.forEach(s => {
-        state[di][b.key].slots[s] = v;
-        syncDayPicker(di+"."+b.key+"::"+s, v);
-      });
-    });
-    updateProgress();
   }
 
   function setVal(event, btn){
     if(event && event.stopPropagation) event.stopPropagation();
+    if(event && event.preventDefault) event.preventDefault();
     const picker = btn.parentElement;
     const path = picker.dataset.path, v = btn.dataset.v;
     selectInPicker(picker, v);
@@ -439,12 +423,12 @@
     const seg = base.split("."), diRaw = seg[0], bk = seg[1];
 
     if(diRaw === "all"){
-      if(slot) {
-        for(let di=0; di<DAYS.length; di++){
-          state[di][bk].slots[slot] = v;
-          syncDayPicker(di+"."+bk+"::"+slot, v);
-          checkAndUpdateBlockHeader(di, bk);
-        }
+      if(slot){
+        applyToAllDays(bk, v, slot);
+      } else {
+        applyToAllDays(bk, v, null);
+        const blockConfig = BLOCKS.find(b => b.key === bk);
+        if(blockConfig) blockConfig.slots.forEach(s => syncDayPicker("all."+bk+"::"+s, v));
       }
     } else {
       if(slot){
@@ -453,7 +437,7 @@
       } else {
         state[diRaw][bk].level = v;
         const blockConfig = BLOCKS.find(b => b.key === bk);
-        if(blockConfig) {
+        if(blockConfig){
           blockConfig.slots.forEach(s => {
             state[diRaw][bk].slots[s] = v;
             syncDayPicker(diRaw+"."+bk+"::"+s, v);
@@ -466,6 +450,7 @@
 
   function toggleDetail(event, btn, path){
     if(event && event.stopPropagation) event.stopPropagation();
+    if(event && event.preventDefault) event.preventDefault();
     const slots = document.querySelector('[data-slots="'+path+'"]');
     const open = !slots.classList.contains("open");
     slots.classList.toggle("open", open);
@@ -488,17 +473,18 @@
   }
 
   function getCompressedRanges(slotsObject) {
-    const hoursArray = Array.from({length: 25}, (_, i) => ("0" + i).slice(-2) + ":00");
     const ranges = [];
     let currentVal = null, startHour = null, lastEndHour = null;
-    for (let i = 0; i < hoursArray.length - 1; i++) {
-      const currentSlotStr = hoursArray[i] + "-" + hoursArray[i+1];
-      const slotVal = slotsObject[currentSlotStr] || "1";
+    for (let i = 0; i < VILLAGE_HOURS_ORDER.length; i++) {
+      const slotStr = VILLAGE_HOURS_ORDER[i];
+      const slotVal = slotsObject[slotStr] || "1";
+      const parts = slotStr.split("-");
       if (slotVal !== currentVal) {
         if (currentVal && currentVal !== "1") ranges.push({ start: startHour, end: lastEndHour, val: currentVal });
-        currentVal = slotVal; startHour = hoursArray[i];
+        currentVal = slotVal;
+        startHour = parts[0];
       }
-      lastEndHour = hoursArray[i+1];
+      lastEndHour = parts[1];
     }
     if (currentVal && currentVal !== "1") ranges.push({ start: startHour, end: lastEndHour, val: currentVal });
     return ranges;
@@ -519,21 +505,21 @@
         compressed.forEach(range => {
           const item = document.createElement("div");
           item.className = "sum-item";
-          let color = "var(--lx)", txt = "✕ לא זמין";
-          if (range.val === "2") { color = "var(--l2)"; txt = "זמינות 2"; }
-          if (range.val === "3") { color = "var(--l3)"; txt = "עדיפות גבוהה"; }
+          let color = "var(--lx)", txt = "✕ לא יכול";
+          if (range.val === "2") { color = "var(--l2)"; txt = "עדיפות 2"; }
+          if (range.val === "3") { color = "var(--l3)"; txt = "מוצא אחרון"; }
           item.innerHTML = `<div><span class="sum-day">יום ${d.name}</span><span class="sum-time">${range.start}-${range.end}</span></div>
-                          <span class="sum-badge" style="background:${color}">${txt}</span>`;
+                            <span class="sum-badge" style="background:${color}">${txt}</span>`;
           grid.appendChild(item);
         });
       }
     });
-    if (!hasChanges) grid.innerHTML = '<div class="sum-empty">לא שינית עדיין שום משמרת (זמינות 1 לכל ימי השבוע)</div>';
+    if (!hasChanges) grid.innerHTML = '<div class="sum-empty">לא בוצעו שינויים (הנך מסומן כזמין "עדיפות 1" לכל השבוע)</div>';
   }
 
   function copySummaryText(event) {
     if(event) event.stopPropagation();
-    let txt = `סיכום זמינות שמירות - ${GUARD}\n===================\n`;
+    let txt = `סיכום עדיפויות שמירה - ${GUARD}\n=========================\n`;
     let hasChanges = false;
     DAYS.forEach((d, di) => {
       const dayFullSlots = {};
@@ -544,15 +530,15 @@
       if (compressed.length > 0) {
         hasChanges = true;
         compressed.forEach(range => {
-          let vTxt = "זמינות 1";
-          if (range.val === "2") vTxt = "זמינות 2";
-          if (range.val === "3") vTxt = "זמינות 3";
-          if (range.val === "x") vTxt = "✕ לא זמין";
-          txt += `• יום ${d.name} | שעות ${range.start}-${range.end} → ${vTxt}\n`;
+          let vTxt = "עדיפות 1";
+          if (range.val === "2") vTxt = "עדיפות 2";
+          if (range.val === "3") vTxt = "עדיפות 3";
+          if (range.val === "x") vTxt = "✕ לא יכול";
+          txt += `• יום ${d.name} | שעות ${range.start}-${range.end} ← ${vTxt}\n`;
         });
       }
     });
-    if (!hasChanges) txt += "כל המשמרות ברמת זמינות 1.";
+    if (!hasChanges) txt += "זמין כרגיל (עדיפות 1) בכל השבוע.";
     navigator.clipboard.writeText(txt).then(() => alert("הסיכום הועתק!"));
   }
 
@@ -564,7 +550,7 @@
   function processImportText(event) {
     if(event) event.stopPropagation();
     const rawTxt = document.getElementById("importText").value;
-    if(!rawTxt.trim()) { alert("אנא הדבק טקסט יבוא תחילה."); return; }
+    if(!rawTxt.trim()) { alert("אנא הדבק טקסט תחילה."); return; }
     const txt = rawTxt.replace(/[''"״]/g, "");
     DAYS.forEach((d, di) => {
       BLOCKS.forEach(b => {
@@ -579,20 +565,23 @@
       DAYS.forEach((d, di) => { if (line.includes(`יום ${d.name}`)) foundDayIdx = di; });
       if (foundDayIdx === -1) return;
       let val = "1";
-      if (line.includes("✕") || line.includes("לא זמין") || line.includes("לא_זמין")) val = "x";
-      else if (line.includes("זמינות 2")) val = "2";
-      else if (line.includes("זמינות 3") || line.includes("עדיפות גבוהה")) val = "3";
-      const timeMatch = line.match(/(\d{2}:\d{2})[-–](\d{2}:\d{2})/);
+      if (line.includes("✕") || line.includes("לא יכול") || line.includes("חסימה")) val = "x";
+      else if (line.includes("עדיפות 2")) val = "2";
+      else if (line.includes("עדיפות 3") || line.includes("אחרון")) val = "3";
+      const timeMatch = line.match(/(\d{1,2}:\d{2})[-–](\d{1,2}:\d{2})/);
       if (timeMatch) {
         const startH = parseInt(timeMatch[1].split(':')[0], 10);
         const endH = parseInt(timeMatch[2].split(':')[0], 10);
         BLOCKS.forEach(b => {
           b.slots.forEach(s => {
             const slotStart = parseInt(s.split(':')[0], 10);
-            if (slotStart >= startH && slotStart < endH) {
-              state[foundDayIdx][b.key].slots[s] = val;
-              countParsed++;
+            let match = false;
+            if (startH <= endH) {
+              match = (slotStart >= startH && slotStart < endH);
+            } else {
+              match = (slotStart >= startH || slotStart < endH);
             }
+            if (match) { state[foundDayIdx][b.key].slots[s] = val; countParsed++; }
           });
         });
       }
@@ -605,13 +594,19 @@
     });
     updateProgress();
     toggleImportZone();
-    alert(`הטיפול הצליח! עודכנו ${countParsed} שעות.`);
+    alert(`הפענוח הושלם! עודכנו ${countParsed} שעות בהצלחה.`);
+  }
+
+  function checkHistoryAvailability() {
+    if(localStorage.getItem(STORAGE_KEY)) {
+      document.getElementById("historyBtn").style.display = "flex";
+    }
   }
 
   function loadPreviousWeek(event) {
     if(event) event.stopPropagation();
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) { alert("לא נמצא מידע שבוע קודם. הגש את הטופס השבוע כדי לשמור את הנתונים."); return; }
+    if (!saved) { alert("לא נמצאה זמינות שמורה משבוע שעבר על מכשיר זה."); return; }
     try {
       const parsed = JSON.parse(saved);
       DAYS.forEach((d, di) => {
@@ -630,40 +625,37 @@
         }
       });
       updateProgress();
-      alert("הזמינות מהשבוע הקודם נטענה בהצלחה!");
+      alert("הזמינות משבוע שעבר שוחזרה בהצלחה!");
     } catch (e) { console.error(e); }
   }
 
   function submitForm(event){
     if(event && event.preventDefault) event.preventDefault();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-
-    const payload = {
-      guard: GUARD,
-      days: state,
-      submittedAt: new Date().toISOString()
-    };
-
+    const payload = { guard: GUARD, days: state, submittedAt: new Date().toISOString() };
     const btn = document.getElementById("sendBtn");
     btn.disabled = true;
     btn.textContent = "שולח...";
-
     google.script.run
       .withSuccessHandler(function() {
         document.getElementById("toast").classList.add("show");
         btn.disabled = false;
-        btn.textContent = "שלח זמינות";
+        btn.textContent = "שליחת הזמינות";
+        checkHistoryAvailability();
       })
       .withFailureHandler(function(err) {
         alert("שגיאה בשליחה: " + (err.message || err));
         btn.disabled = false;
-        btn.textContent = "שלח זמינות";
+        btn.textContent = "שליחת הזמינות";
       })
       .saveGuardPreferences(payload);
   }
 
-  build();
-  applyStoredFilter();
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("guardDisplay").textContent = "שלום, " + GUARD;
+    build();
+    applyStoredFilter();
+  });
 </script>
 </body>
 </html>
