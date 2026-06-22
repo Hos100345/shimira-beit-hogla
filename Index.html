@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<base target="_top">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Assistant:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16233F; --ink-soft:#22335A;
+    --paper:#F8F5EE; --paper-line:#E7E0D2;
+    --lamp:#E8A33D; --lamp-deep:#C9852A;
+    --text:#1A2238; --text-soft:#5A6478; --mute:#5C6B7A;
+    --l1:#2F8F5B; --l2:#D9A23B; --l3:#B23A2E; --lx:#1A2238;
+    --shadow:0 1px 2px rgba(11,18,35,.06),0 8px 24px rgba(11,18,35,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--ink);color:var(--text)}
+  body{font-family:"Assistant",system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;padding-bottom:140px}
+  .wrap{max-width:580px;margin:0 auto;padding:0 16px}
+
+  header{
+    position:relative;
+    background:
+      radial-gradient(120px 120px at calc(100% - 46px) 38px, rgba(232,163,61,.30), rgba(232,163,61,0) 70%),
+      linear-gradient(180deg,#1B2B4E 0%, var(--ink) 100%);
+    color:#EFF2F8;padding:30px 0 26px;border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .eyebrow{font-family:"Rubik";font-weight:500;font-size:12px;letter-spacing:.14em;color:var(--lamp);margin-bottom:6px}
+  .title{font-family:"Rubik";font-weight:700;font-size:26px;letter-spacing:-.01em}
+  .sub{color:#AEB8CD;font-size:14px;margin-top:2px}
+
+  .quick-actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+  .btn-action{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:"Assistant";font-weight:600;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px}
+  .btn-action:hover{background:rgba(255,255,255,0.15);border-color:var(--lamp)}
+  .btn-action.primary{background:rgba(232,163,61,0.15);border-color:var(--lamp);color:var(--lamp)}
+  .btn-action.primary:hover{background:var(--lamp);color:var(--ink)}
+
+  .import-zone{background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.2);border-radius:14px;padding:14px;margin-top:14px;display:none}
+  .import-zone.show{display:block}
+  .import-zone textarea{width:100%;height:80px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;padding:8px;font-family:"Assistant";font-size:13px;resize:none;margin-bottom:8px;outline:none}
+  .import-zone textarea:focus{border-color:var(--lamp)}
+  .import-btn-group{display:flex;justify-content:flex-end;gap:8px}
+  .btn-sm{padding:5px 12px;font-size:12px;border-radius:6px;cursor:pointer;font-family:"Assistant";font-weight:600;border:1px solid transparent}
+  .btn-sm.apply{background:var(--lamp);color:var(--ink)}
+  .btn-sm.cancel{background:transparent;color:#AEB8CD;border-color:rgba(255,255,255,0.1)}
+
+  .greet{margin-top:14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px 14px}
+  .lamp{width:30px;height:30px;flex:0 0 auto;border-radius:50%;background:radial-gradient(circle at 50% 38%, #FFE6AE 0%, var(--lamp) 46%, var(--lamp-deep) 100%);box-shadow:0 0 0 4px rgba(232,163,61,.15),0 0 18px rgba(232,163,61,.45)}
+  .greet b{font-family:"Rubik";font-weight:600;font-size:16px;color:#fff}
+  .greet span{display:block;font-size:12.5px;color:#9FAAC1}
+
+  .legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 4px;font-size:12.5px;color:var(--text-soft);background:var(--paper);border:1px solid var(--paper-line);border-radius:12px;padding:10px 12px}
+  .legend .scale{display:flex;gap:3px}
+  .legend .dot{width:16px;height:16px;border-radius:5px}
+  .legend .x{width:16px;height:16px;border-radius:5px;background:var(--mute);color:#fff;font-size:11px;display:grid;place-items:center}
+
+  .day{background:var(--paper);border:1px solid var(--paper-line);border-radius:18px;box-shadow:var(--shadow);margin-top:12px;overflow:hidden;transition:all 0.3s ease}
+  .day-head{display:flex;align-items:center;gap:8px;padding:14px 16px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+  .day-head:hover{background:#F5EFE4}
+  .day-name{font-family:"Rubik";font-weight:600;font-size:17px}
+  .day-date{font-size:13px;color:var(--text-soft)}
+  .shab{margin-inline-start:auto;font-size:11.5px;color:var(--lamp-deep);background:#FBF1DC;border:1px solid #F0DCB0;border-radius:999px;padding:2px 9px}
+
+  .day-arrow{margin-inline-start:4px;font-size:12px;color:var(--text-soft);transition:transform 0.2s ease;font-weight:bold}
+  .day.open .day-arrow{transform:rotate(180deg)}
+
+  .day-body{max-height:0;overflow:hidden;transition:max-height 0.3s ease-out;background:#FAF8F2}
+  .day.open .day-body{max-height:3000px;transition:max-height 0.4s ease-in}
+
+  .global-card{border-color:#E6C988;box-shadow:0 1px 2px rgba(11,18,35,.06),0 10px 26px rgba(232,163,61,.18)}
+  .global-card .day-head{background:#FBF1DC;cursor:default}
+  .global-card .day-head:hover{background:#FBF1DC}
+  .global-card .day-name{color:var(--lamp-deep)}
+  .global-badge{margin-inline-start:auto;font-size:11.5px;color:var(--lamp-deep);background:#fff;border:1px solid #F0DCB0;border-radius:999px;padding:2px 10px;white-space:nowrap}
+  .global-sub{font-size:12.5px;color:var(--text-soft);padding:0 16px 10px;background:#FBF1DC;border-bottom:1px solid var(--paper-line)}
+
+  .block{border-top:1px solid var(--paper-line);padding:14px 16px}
+  .block-top{display:flex;align-items:center;gap:10px}
+  .block-label{font-weight:600;font-size:15px}
+  .block-time{font-size:12.5px;color:var(--text-soft)}
+  .detail-toggle{margin-inline-start:auto;border:1px solid var(--paper-line);background:#fff;color:var(--text-soft);font-family:"Assistant";font-weight:600;font-size:12.5px;border-radius:999px;padding:5px 11px;cursor:pointer;white-space:nowrap;transition:all .15s}
+  .detail-toggle:hover{border-color:var(--lamp);color:var(--lamp-deep)}
+  .detail-toggle.on{background:#FBF1DC;border-color:#E6C988;color:var(--lamp-deep)}
+
+  .fast-fill-group{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .btn-fast{flex:1;min-width:75px;background:#fff;border:1px solid var(--paper-line);border-radius:8px;padding:8px 4px;font-family:"Assistant";font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.15s}
+  .btn-fast:hover{border-color:var(--lamp);background:#FFFBF5}
+  .btn-fast.v1{color:var(--l1)}
+  .btn-fast.v2{color:var(--l2)}
+  .btn-fast.v3{color:var(--l3)}
+  .btn-fast.vx{color:var(--mute)}
+
+  .picker{display:flex;gap:5px;margin-top:10px}
+  .seg{flex:1;min-width:0;border:1px solid var(--paper-line);background:#fff;border-radius:10px;padding:9px 0;cursor:pointer;font-family:"Rubik";font-weight:600;font-size:15px;color:var(--text-soft);display:grid;place-items:center;transition:all .15s;-webkit-tap-highlight-color:transparent}
+  .seg:active{transform:scale(.94)}
+  .seg .cap{font-size:9.5px;font-weight:500;color:#9aa3b4;margin-top:1px;font-family:"Assistant"}
+  .seg.x{flex:0 0 46px;color:var(--mute)}
+  .seg.sel[data-v="1"]{background:var(--l1)}
+  .seg.sel[data-v="2"]{background:var(--l2)}
+  .seg.sel[data-v="3"]{background:var(--l3)}
+  .seg.sel[data-v="x"]{background:var(--lx)}
+  .seg.sel{color:#fff;border-color:transparent;box-shadow:0 3px 8px rgba(0,0,0,.15)}
+  .seg.sel .cap{color:rgba(255,255,255,.85)}
+
+  .slots{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:0;opacity:0;overflow:hidden;transition:all 0.3s ease}
+  .slots.open{max-height:1500px;opacity:1;margin-bottom:6px}
+
+  .slot{display:flex;align-items:center;gap:12px;background:#FFF;border:1px solid var(--paper-line);border-radius:12px;padding:8px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.02)}
+  .slot-time{font-family:"Rubik";font-weight:600;font-size:13px;color:var(--text);flex:0 0 85px}
+  .slot .picker{margin-top:0;flex:1}
+  .slot .seg{padding:6px 0;font-size:13px;border-radius:8px}
+  .slot .seg.x{flex:0 0 38px}
+
+  .hint{font-size:12px;color:var(--text-soft);margin-top:4px;text-align:center}
+
+  .summary-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:20px;margin-top:24px;}
+  .summary-title{font-family:"Rubik";font-weight:700;font-size:17px;color:#fff;margin-bottom:14px;display:flex;align-items:center;justify-content:between}
+  .btn-copy{margin-inline-start:auto;background:var(--lamp);color:#241a06;border:0;padding:6px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;box-shadow:0 4px 10px rgba(232,163,61,0.2)}
+  .btn-copy:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(232,163,61,0.3)}
+
+  .summary-grid{display:grid;gap:10px;grid-template-columns:1fr}
+  @media(min-width:480px){.summary-grid{grid-template-columns:1fr 1fr}}
+
+  .sum-item{background:var(--paper);border:1px solid var(--paper-line);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:between;gap:10px;box-shadow:0 2px 5px rgba(0,0,0,0.05)}
+  .sum-day{font-family:"Rubik";font-weight:600;font-size:14px;color:var(--text)}
+  .sum-time{font-size:13px;color:var(--text-soft);display:block;margin-top:1px}
+  .sum-badge{padding:4px 10px;border-radius:8px;color:#fff;font-weight:600;font-size:12px;white-space:nowrap;text-align:center}
+  .sum-empty{text-align:center;color:#AEB8CD;font-size:14px;padding:20px 0;grid-column:1/-1}
+
+  .note{color:#9FAAC1;font-size:12px;text-align:center;margin:18px 0 6px}
+
+  .bar{position:fixed;inset-inline:0;bottom:0;z-index:20;background:linear-gradient(180deg, rgba(22,35,63,0), var(--ink) 38%);padding:18px 16px}
+  .bar-inner{max-width:580px;margin:0 auto;display:flex;align-items:center;gap:12px}
+  .progress{flex:1;font-size:12.5px;color:#AEB8CD}
+  .progress b{color:#fff;font-family:"Rubik"}
+  .send{flex:0 0 auto;border:0;cursor:pointer;font-family:"Rubik";font-weight:600;font-size:15px;color:#241a06;background:linear-gradient(180deg,#F4BA55,var(--lamp));border-radius:14px;padding:13px 22px;box-shadow:0 6px 18px rgba(232,163,61,.4);transition:transform .08s, box-shadow .2s}
+  .send:hover{box-shadow:0 8px 22px rgba(232,163,61,.55)}
+  .send:disabled{opacity:0.6;cursor:not-allowed}
+
+  .toast{position:fixed;inset:0;z-index:40;display:none;background:rgba(11,18,35,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:20px}
+  .toast.show{display:flex}
+  .card{background:var(--paper);border-radius:20px;max-width:420px;width:100%;padding:26px 22px;box-shadow:0 24px 60px rgba(0,0,0,.4);text-align:center}
+  .card .ok{width:54px;height:54px;border-radius:50%;margin:0 auto 14px;background:radial-gradient(circle at 50% 40%, #7FD0A1, var(--l1));display:grid;place-items:center;color:#fff;font-size:28px}
+  .card .close{width:100%;border:0;cursor:pointer;font-family:"Rubik";font-weight:600;font-size:15px;color:#fff;background:var(--ink);border-radius:13px;padding:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">בית חוגלה · שמירת הישוב</div>
+    <div class="title">זינות לשמירה</div>
+    <div class="sub" id="weekLabel">השבוע הקרוב</div>
+
+    <div class="quick-actions">
+      <button type="button" class="btn-action" onclick="toggleImportZone(event)">📥 הדבק סיכום מוכן</button>
+      <button type="button" class="btn-action primary" onclick="loadPreviousWeek(event)">📅 טען זמינות משבוע שעבר</button>
+    </div>
+
+    <div class="import-zone" id="importZone">
+      <textarea id="importText" placeholder="הדבק כאן את טקסט הסיכום ששמרת או שקיבלת (לדוגמה: • יום ראשון | שעות 02:00-04:00 ← ✕ לא יכול)..."></textarea>
+      <div class="import-btn-group">
+        <button type="button" class="btn-sm cancel" onclick="toggleImportZone(event)">ביטול</button>
+        <button type="button" class="btn-sm apply" onclick="processImportText(event)">טען טקסט לטופס</button>
+      </div>
+    </div>
+
+    <div class="greet">
+      <div class="lamp"></div>
+      <div>
+        <b>שלום, <?= guardName ?></b>
+        <span>מלא את העדיפויות שלך לשבוע</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="legend">
+    <span>עדיפות:</span>
+    <span class="scale">
+      <span class="dot" style="background:var(--l1)"></span>
+      <span class="dot" style="background:var(--l2)"></span>
+      <span class="dot" style="background:var(--l)"></span>
+    </span>
+    <span>1 = מתאים ½ 2 = שנייה · 3 = נ מחרון (הוא שמורן)</span>
+    <span style="display:flex;align-items:center;gap:5px"><span class="x">✕</span> לא יכול</span>
+  </div>
+
+  <div id="globalPanel"></div>
+  <div id="days"></div>
+
+  <div class="summary-card" id="summaryCard">
+    <div class="summary-title">
+      <span>📋 ריוז  השינויים והחסימות שלך</span>
+      <button type="button" class="btn-copy" onclick="copySummaryText(event)">🗐 העתק סיכום</button>
+    </div>
+    <div class="summary-grid" id="summaryGrid"></div>
+  </div>
+
+  <div class="note">22:00–02:00 בכל לילה הוא תורנות ישוב — לא נבחר כאן.</div>
+</div>
+
+<div class="bar">
+  <div class="bar-inner">
+    <div class="progress">שינית <b id="filled">0</b> מתוך <b id="total">0</b> משמרות · השאר עדיפות 1</div>
+    <button type="button" class="send" id="sendBtn" onclick="submitForm(event)">שליחת הזמינות</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <div class="card">
+    <div class="ok">✓</div>
+    <h3>נשלח, תודה</h3>
+    <p>הזמינות שלך נשמרה בהצלחה.</p>
+    <button type="button" class="close" onclick="document.getElementById('toast').classList.remove('show')">סגירה</button>
+  </div>
+</div>
+
+<script>
+  const GUARD = <?= JSON.stringify(guardName) ?>;
+  const STORAGE_KEY = "guard_prev_state_" + GUARD.replace(/\s+/g, '_');
+
+  const DAYS = [
+    {name:"ראשון",  date:""},
+    {name:"שני",    date:""},
+    {name:"שלישי",  date:""},
+    {name:"רביעי",  date:""},
+    {name:"חמישי",  date:""},
+    {name:"שישי",   date:"", shab:"כניסת שבת"},
+    {name:"שבת",    date:"", shab:"שבת"},
+  ];
+
+  function hourSlots(startH, endH){
+    const out = [];
+    for(let h = startH; h < endH; h++){
+      out.push(("0"+h).slice(-2)+":00-"+("0"+(h+1)).slice(-2)+":00");
+    }
+    return out;
+  }
+  const BLOCKS = [
+    {key:"morning", label:"בוקר", time:"06:00-14:00", slots:hourSlots(6,14)},
+    {key:"evening", label:"ערב",  time:"14:00-22:00", slots:hourSlots(14,22)},
+    {key:"night",   label:"לילה", time:"02:00-06:00", slots:hourSlots(2,6)},
+  ];
+
+  let state = {};
+
+  function pickerHtml(path){
+    let h = '<div class="picker" data-path="'+path+'">';
+    h += '<button type="button" class="seg sel" data-v="1" onclick="setVal(event,this)">1<span class="cap">מתאים</span></button>';
+    h += '<button type="button" class="seg" data-v="2" onclick="setVal(event,this)">2<span class="cap">שנייה</span></button>';
+    h += '<button type="button" class="seg" data-v="3" onclick="setVal(event,this)">3<span class="cap">אחרון</span></button>';
+    h += '<button type="button" class="seg x" data-v="x" onclick="setVal(event,this)">✕</button>';
+    h += '</div>';
+    return h;
+  }
+
+  function blockHtml(base, b, isGlobal){
+    const path = base+"."+b.key;
+    const fastFillHtml = isGlobal ? `
+      <div class="fast-fill-group">
+        <button type="button" class="btn-fast v1" onclick="fastFillGlobal('${b.key}','1')">מלא 1 לכל השבוע</button>
+        <button type="button" class="btn-fast v2" onclick="fastFillGlobal('${b.key}','2')">מלא 2 לכל השבוע</button>
+        <button type="button" class="btn-fast v3" onclick="fastFillGlobal('${b.key}','3')">מלא 3 לכל השבוע</button>
+        <button type="button" class="btn-fast vx" onclick="fastFillGlobal('${b.key}','x')">מלא ✕ לכל השבוע</button>
+      </div>` : pickerHtml(path);
+
+    return '<div class="block">'+
+      '<div class="block-top">'+
+        '<span class="block-label">'+b.label+'</span>'+
+        '<span class="block-time">'+b.time+'</span>'+
+        '<button type="button" class="detail-toggle" onclick="toggleDetail(event,this,\''+path+'\')">פרט שעות</button>'+
+      '</div>'+
+      fastFillHtml+
+      '<div class="slots" data-slots="'+path+'">'+
+        b.slots.map(s=>(
+          '<div class="slot"><span class="slot-time">'+s+'</span>'+pickerHtml(path+"::"+s)+'</div>'
+        )).join('')+
+        '<div class="hint">'+
+          (isGlobal ? 'מגדיר את משמרת זו לכל ימי השבוע בבת אחת.' : 'שינוי כאן דורס את הבחירה הכללית.')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function buildGlobal(){
+    const root = document.getElementById("globalPanel");
+    root.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "day global-card open";
+    let html = '<div class="day-head">'+
+        '<span class="day-name">החל על כל השבוע בבת אחת (הגדרה מהירה)</span>'+
+        '<span class="global-badge">מילוי גלובלי</span>'+
+      '</div>'+
+      '<div class="global-sub">בחר משמרת שלמה כדי להחיל אותה מיידית על כל ימי השבוע. לאחר מכן תוכל לתקן נקודתית בימים למ2ؔ
