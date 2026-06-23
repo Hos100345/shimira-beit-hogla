@@ -1305,8 +1305,8 @@ function saveGuardPreferences(payload) {
 
     const lastCol = sh.getLastColumn();
     const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
-    const guardCol = headerRow.findIndex(h => String(h).trim() === String(payload.guard || payload.name || '').trim());
-    const resolvedName = payload.guard || payload.name || '';
+    const resolvedName = String(payload.guard || payload.name || '').trim().replace(/^["']+|["']+$/g, '').trim();
+    const guardCol = headerRow.findIndex(h => String(h).trim() === resolvedName);
     if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: [' + resolvedName + '] ' + GS_VERSION);
 
     const sheetCol = 6 + guardCol;
