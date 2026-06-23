@@ -1361,10 +1361,12 @@ function debugGuardLookup() {
   const testName = 'הושעיה';
   const mgmt = mgmt_();
   const sh = mgmt.getSheetByName(SHEET_AVAIL);
-  if (!sh) { Logger.log('❌ גיליון זמינות לא נמצא'); return; }
+  if (!sh) { SpreadsheetApp.getActiveSpreadsheet().toast('❌ גיליון זמינות לא נמצא', 'DEBUG', 30); return; }
   const lastCol = sh.getLastColumn();
   const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
-  Logger.log('שמות בגיליון: ' + JSON.stringify(headerRow));
   const idx = headerRow.findIndex(h => String(h).trim() === testName);
-  Logger.log(idx >= 0 ? '✅ נמצא בעמודה ' + (6 + idx) : '❌ לא נמצא — בדוק איות');
+  const msg = 'שמות: ' + headerRow.filter(Boolean).join(', ') + '\n\n' +
+              (idx >= 0 ? '✅ הושעיה נמצא בעמודה ' + (6 + idx) : '❌ הושעיה לא נמצא בגיליון');
+  SpreadsheetApp.getActiveSpreadsheet().toast(msg, 'DEBUG', 60);
+  Logger.log(msg);
 }
