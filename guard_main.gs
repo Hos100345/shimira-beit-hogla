@@ -21,7 +21,8 @@ const SHEET_EXTERNAL = '📅 שומרים חיצוניים';
 const SHEET_HISTORY = '📊 היסטוריה וחוב';  
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
-const SHEET_MANAGER = '📊 מבט מנהל';  
+const SHEET_MANAGER = '📊 מבט מנהל';
+const GS_VERSION = 'v2.2';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1306,7 +1307,7 @@ function saveGuardPreferences(payload) {
     const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
     const guardCol = headerRow.findIndex(h => String(h).trim() === String(payload.guard || payload.name || '').trim());
     const resolvedName = payload.guard || payload.name || '';
-    if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: ' + resolvedName);
+    if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: [' + resolvedName + '] ' + GS_VERSION);
 
     const sheetCol = 6 + guardCol;
     const blocks = buildBlocks_();
