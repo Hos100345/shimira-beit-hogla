@@ -1403,7 +1403,10 @@ function saveGuardPreferences(payload) {
       rowMap[key] = 3 + i;
     });
 
-    payload.days.forEach((dayData, di) => {
+    const daysArray = Array.isArray(payload.days)
+      ? payload.days
+      : Object.keys(payload.days).sort((a, b) => +a - +b).map(k => payload.days[k]);
+    daysArray.forEach((dayData, di) => {
       const dayName = DAYS[di];
       Object.keys(dayData).forEach(bk => {
         const slotData = dayData[bk];
