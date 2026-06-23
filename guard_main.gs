@@ -1,5 +1,5 @@
 /**  
- * 🛡️ מערכת שיבוץ שמירות — גרסה 2.3: תיקון גובה מסך נייד, Flexbox layout
+ * 🛡️ מערכת שיבוץ שמירות — גרסה 2.4: אופטימיזציה אוטומטית של מכסת שעות ומנוחה
  * ====================================================================================  
  * גרסה זו סורקת מראש את כל השיבוצים הידניים בשבוע, משקללת את השעות והנקודות שלהם  
  * אל תוך תוכנית העבודה, ומונעת העמסת יתר על שומרים ששוריינו להם משמרות מראש.  
@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.3';
+const GS_VERSION = 'v2.4';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -474,19 +474,80 @@ function updateTrafficLights() {
  sh.getRange(2, 6, 1, numG).setValues([lights]);  
 }  
   
-/* ============================================================  
- * 9. ▶️ הרץ שיבוץ  
- * ============================================================ */  
-function runScheduler() {  
- const mgmt = mgmt_();  
- const guards = readGuards_(mgmt);  
- if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
-  
- const cfg = readSettings_(mgmt);  
- const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
-  
- const plan = buildPlan_(mgmt, guards, cfg, hardCap, null);  
- writeScheduleResult_(mgmt, guards, plan);  
+/* ============================================================
+ * 9. ▶️ הרץ שיבוץ
+ * ============================================================ */
+
+// סופר כמה שעות פנימיות נדרשות לכיסוי (לא כולל חיצוניים / position=0)
+function calcRequiredHours_(mgmt, guards, cfg) {
+  const blocks = buildBlocks_();
+  const sh = mgmt.getSheetByName(SHEET_AVAIL);
+  if (!sh) return 0;
+  const lastRow = sh.getLastRow();
+  if (lastRow < 3) return 0;
+  const data = sh.getRange(3, 1, lastRow - 2, 5 + guards.length).getValues();
+  let total = 0;
+  data.forEach(v => {
+    const label = String(v[1]).trim();
+    if (!label) return;
+    const block = blocks.find(b => b.label === label);
+    if (!block || block.external) return;
+    if (v[3] === 'חיצוני בלבד') return;
+    const positions = Number(v[4]) || 0;
+    if (positions === 0) return;
+    total += block.hours * positions;
+  });
+  return total;
+}
+
+function runScheduler() {
+  const mgmt = mgmt_();
+  const guards = readGuards_(mgmt);
+  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }
+
+  const cfg = readSettings_(mgmt);
+  const settingsCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
+
+  // אוטומטי: חישוב שעות נדרשות והגדרת מכסה ריאלית
+  const totalInternal = calcRequiredHours_(mgmt, guards, cfg);
+  const minPerGuard = guards.length > 0 ? Math.ceil(totalInternal / guards.length) : 24;
+  let hardCap = Math.max(settingsCap, minPerGuard + 2);
+
+  let plan = buildPlan_(mgmt, guards, cfg, hardCap, null);
+  let emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
+
+  // שלב א׳ — הגדל מכסה (עד +12 שעות)
+  let capAdded = 0;
+  while (emptyCount > 0 && capAdded < 12) {
+    hardCap++;
+    capAdded++;
+    plan = buildPlan_(mgmt, guards, cfg, hardCap, null);
+    emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
+  }
+
+  // שלב ב׳ — הפחת זמן מנוחה ב-1 שעה אם עדיין יש ריקים
+  let restRelaxed = false;
+  if (emptyCount > 0) {
+    const relaxedCfg = Object.assign({}, cfg, {
+      MIN_REST_TIME: Math.max(1, (Number(cfg.MIN_REST_TIME) || 4) - 1)
+    });
+    const rPlan = buildPlan_(mgmt, guards, relaxedCfg, hardCap, null);
+    const rEmpty = rPlan.decisions.filter(d => d.mode === 'ריק').length;
+    if (rEmpty < emptyCount) {
+      plan = rPlan;
+      emptyCount = rEmpty;
+      restRelaxed = true;
+    }
+  }
+
+  plan.totalInternal = totalInternal;
+  plan.numGuards = guards.length;
+  plan.optCap = hardCap;
+  plan.settingsCap = settingsCap;
+  plan.capAdded = capAdded;
+  plan.restRelaxed = restRelaxed;
+
+  writeScheduleResult_(mgmt, guards, plan);
 }  
   
 function replanSchedule() {  
@@ -611,14 +672,55 @@ function writeScheduleResult_(mgmt, guards, plan) {
  writeHistory_(mgmt, guards, st);  
  const pubUrl = publishSchedule_(mgmt);  
   
- let msg = '✅ השיבוץ הושלם! (מכסה: ' + hardCap + ' שעות לשומר';  
- if (maxShift) msg += ', משמרת עד ' + maxShift + ' שעות';  
- msg += ')\n\n' + guards.map((n, g) =>  
- n + ': ' + st[g].hours + ' שעות, ' + Math.round(st[g].weekdayPoints + st[g].shabbatPoints) + ' נק׳ קושי').join('\n');  
- msg += '\n\n💡 אם הפריסה לא טובה — תפריט 🛡️ ← "🔄 פרוס מחדש" לפריסה חלופית.';  
- if (alerts.length) msg += '\n\n' + alerts.join('\n');  
- if (pubUrl) msg += '\n\n🔗 קובץ הפרסום לשומרים:\n' + pubUrl;  
- SpreadsheetApp.getUi().alert(msg);  
+  let msg = '✅ השיבוץ הושלם! (מכסה: ' + hardCap + ' שעות לשומר';
+  if (maxShift) msg += ', משמרת עד ' + maxShift + ' שעות';
+  msg += ')
+
+' + guards.map((n, g) =>
+    n + ': ' + st[g].hours + ' שעות, ' + Math.round(st[g].weekdayPoints + st[g].shabbatPoints) + ' נק׳ קושי').join('
+');
+
+  // דוח אופטימיזציה אוטומטי
+  const emptyShifts = decisions.filter(d => d.mode === 'ריק').length;
+  if (typeof plan.totalInternal === 'number' && plan.numGuards > 0) {
+    const hpp = Math.ceil(plan.totalInternal / plan.numGuards);
+    const hppPlus = Math.ceil(plan.totalInternal / (plan.numGuards + 1));
+    msg += '
+
+📊 ניתוח אוטומטי: ' + plan.totalInternal + ' שעות ÷ ' + plan.numGuards + ' שומרים = ' + hpp + ' שעות/שומר';
+    if (plan.capAdded > 0) msg += '
+   🔧 מכסה הוגדלה אוטומטית ב-' + plan.capAdded + ' שעות → ' + plan.optCap + ' שעות/שומר';
+    if (plan.restRelaxed) msg += '
+   🔧 זמן מנוחה הופחת ב-1 שעה (כדי לכסות את הכל)';
+    if (emptyShifts > 0) {
+      msg += '
+🚨 נותרו ' + emptyShifts + ' משמרות ריקות (כל השומרים חסומים ✕)';
+      msg += '
+📌 פתרון: הוסף שומר נוסף → ' + hppPlus + ' שעות/שומר';
+    } else if (hpp > 28) {
+      msg += '
+⚠️ עומס כבד — מומלץ הוסיף שומר נוסף → ' + hppPlus + ' שעות/שומר';
+    } else if (hpp > 22) {
+      msg += '
+💡 אפשר להוסיף שומר נוסף → ' + hppPlus + ' שעות/שומר';
+    } else {
+      msg += '
+✅ עומס מאוזן — ' + plan.numGuards + ' שומרים מספיקים';
+    }
+  }
+
+  msg += '
+
+💡 אם הפריסה לא טובה — תפריט 🛡️ ← "🔄 פרוס מחדש" לפריסה חלופית.';
+  if (alerts.length) msg += '
+
+' + alerts.join('
+');
+  if (pubUrl) msg += '
+
+🔗 קובץ הפרסום לשומרים:
+' + pubUrl;
+  SpreadsheetApp.getUi().alert(msg);
 }  
   
 function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
