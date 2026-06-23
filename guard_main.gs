@@ -674,52 +674,32 @@ function writeScheduleResult_(mgmt, guards, plan) {
   
   let msg = '✅ השיבוץ הושלם! (מכסה: ' + hardCap + ' שעות לשומר';
   if (maxShift) msg += ', משמרת עד ' + maxShift + ' שעות';
-  msg += ')
-
-' + guards.map((n, g) =>
-    n + ': ' + st[g].hours + ' שעות, ' + Math.round(st[g].weekdayPoints + st[g].shabbatPoints) + ' נק׳ קושי').join('
-');
+  msg += ')\n\n' + guards.map((n, g) =>
+    n + ': ' + st[g].hours + ' שעות, ' + Math.round(st[g].weekdayPoints + st[g].shabbatPoints) + ' נק׳ קושי').join('\n');
 
   // דוח אופטימיזציה אוטומטי
   const emptyShifts = decisions.filter(d => d.mode === 'ריק').length;
   if (typeof plan.totalInternal === 'number' && plan.numGuards > 0) {
     const hpp = Math.ceil(plan.totalInternal / plan.numGuards);
     const hppPlus = Math.ceil(plan.totalInternal / (plan.numGuards + 1));
-    msg += '
-
-📊 ניתוח אוטומטי: ' + plan.totalInternal + ' שעות ÷ ' + plan.numGuards + ' שומרים = ' + hpp + ' שעות/שומר';
-    if (plan.capAdded > 0) msg += '
-   🔧 מכסה הוגדלה אוטומטית ב-' + plan.capAdded + ' שעות → ' + plan.optCap + ' שעות/שומר';
-    if (plan.restRelaxed) msg += '
-   🔧 זמן מנוחה הופחת ב-1 שעה (כדי לכסות את הכל)';
+    msg += '\n\n📊 ניתוח אוטומטי: ' + plan.totalInternal + ' שעות ÷ ' + plan.numGuards + ' שומרים = ' + hpp + ' שעות/שומר';
+    if (plan.capAdded > 0) msg += '\n   🔧 מכסה הוגדלה אוטומטית ב-' + plan.capAdded + ' שעות → ' + plan.optCap + ' שעות/שומר';
+    if (plan.restRelaxed) msg += '\n   🔧 זמן מנוחה הופחת ב-1 שעה (כדי לכסות את הכל)';
     if (emptyShifts > 0) {
-      msg += '
-🚨 נותרו ' + emptyShifts + ' משמרות ריקות (כל השומרים חסומים ✕)';
-      msg += '
-📌 פתרון: הוסף שומר נוסף → ' + hppPlus + ' שעות/שומר';
+      msg += '\n🚨 נותרו ' + emptyShifts + ' משמרות ריקות (כל השומרים חסומים ✕)';
+      msg += '\n📌 פתרון: הוסף שומר נוסף → ' + hppPlus + ' שעות/שומר';
     } else if (hpp > 28) {
-      msg += '
-⚠️ עומס כבד — מומלץ הוסיף שומר נוסף → ' + hppPlus + ' שעות/שומר';
+      msg += '\n⚠️ עומס כבד — מומלץ להוסיף שומר נוסף → ' + hppPlus + ' שעות/שומר';
     } else if (hpp > 22) {
-      msg += '
-💡 אפשר להוסיף שומר נוסף → ' + hppPlus + ' שעות/שומר';
+      msg += '\n💡 אפשר להוסיף שומר נוסף → ' + hppPlus + ' שעות/שומר';
     } else {
-      msg += '
-✅ עומס מאוזן — ' + plan.numGuards + ' שומרים מספיקים';
+      msg += '\n✅ עומס מאוזן — ' + plan.numGuards + ' שומרים מספיקים';
     }
   }
 
-  msg += '
-
-💡 אם הפריסה לא טובה — תפריט 🛡️ ← "🔄 פרוס מחדש" לפריסה חלופית.';
-  if (alerts.length) msg += '
-
-' + alerts.join('
-');
-  if (pubUrl) msg += '
-
-🔗 קובץ הפרסום לשומרים:
-' + pubUrl;
+  msg += '\n\n💡 אם הפריסה לא טובה — תפריט 🛡️ ← "🔄 פרוס מחדש" לפריסה חלופית.';
+  if (alerts.length) msg += '\n\n' + alerts.join('\n');
+  if (pubUrl) msg += '\n\n🔗 קובץ הפרסום לשומרים:\n' + pubUrl;
   SpreadsheetApp.getUi().alert(msg);
 }  
   
