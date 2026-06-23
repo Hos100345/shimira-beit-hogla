@@ -1361,12 +1361,14 @@ function debugGuardLookup() {
   const testName = 'הושעיה';
   const mgmt = mgmt_();
   const sh = mgmt.getSheetByName(SHEET_AVAIL);
-  if (!sh) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות לא נמצא כלל!'); return; }
+  if (!sh) { console.log('❌ גיליון זמינות לא נמצא!'); return; }
   const lastCol = sh.getLastColumn();
   const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
   const names = headerRow.map(h => String(h).trim()).filter(Boolean);
   const idx = names.findIndex(h => h === testName);
-  const msg = 'שמות בגיליון (' + names.length + '):\n' + names.join(', ') +
-              '\n\n' + (idx >= 0 ? '✅ "' + testName + '" נמצא!' : '❌ "' + testName + '" לא נמצא!\nצריך להריץ: צור/עדכן קובץ זמינות');
-  SpreadsheetApp.getUi().alert(msg);
+  const result = idx >= 0 ? '✅ נמצא' : '❌ לא נמצא';
+  console.log('שמות (' + names.length + '): ' + names.join(' | '));
+  console.log(result + ': ' + testName);
+  // כותב לתא B2 בגיליון הזמינות כדי שתוכל לראות
+  sh.getRange(2, 2).setValue('[DEBUG] ' + result + ' | שמות: ' + names.join(', '));
 }
