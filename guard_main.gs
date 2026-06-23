@@ -549,7 +549,7 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  continue;  
  }  
   
- if (!r.external && r.partnerName && !r.partnerIdx < 0) {  
+ if (!r.external && r.partnerName && r.partnerIdx >= 0) {  
  }  
   
  if (r.statusExternal) {  
@@ -1324,20 +1324,9 @@ function saveGuardPreferences(payload) {
     payload.days.forEach((dayData, di) => {
       const dayName = DAYS[di];
       Object.keys(dayData).forEach(bk => {
-        const blockDef = blocks.find(b => b.key === bk || b.label === bk);
-        if (!blockDef) return;
         const slotData = dayData[bk];
-        if (!slotData || !slotData.slots) return;
-        let worstMark = RATING_DEFAULT;
-        slotData.slots.forEach(slot => {
-          const m = slotData.slots[slot] || String(slotData[slot] || '');
-          const slotMark = m ? String(m).trim() : '';
-          if (slotMark === MARK_BLOCK) { worstMark = MARK_BLOCK; return; }
-          if (worstMark === MARK_BLOCK) return;
-          const n = parseInt(slotMark, 10);
-          if (!isNaN(n) && n > worstMark) worstMark = n;
-        });
-        Object.entries(slotData.slots || slotData).forEach(([slot, mark]) => {
+        if (!slotData || typeof slotData.slots !== 'object') return;
+        Object.entries(slotData.slots).forEach(([slot, mark]) => {
           const slotKey = dayName + '|' + slot;
           const sheetRow = rowMap[slotKey];
           if (!sheetRow) return;
@@ -1354,21 +1343,3 @@ function saveGuardPreferences(payload) {
   }
 }
 
-/* ============================================================
- * DEBUG — הרץ מ-Apps Script: בחר debugGuardLookup ← Run
- * ============================================================ */
-function debugGuardLookup() {
-  const testName = 'הושעיה';
-  const mgmt = mgmt_();
-  const sh = mgmt.getSheetByName(SHEET_AVAIL);
-  if (!sh) { console.log('❌ גיליון זמינות לא נמצא!'); return; }
-  const lastCol = sh.getLastColumn();
-  const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
-  const names = headerRow.map(h => String(h).trim()).filter(Boolean);
-  const idx = names.findIndex(h => h === testName);
-  const result = idx >= 0 ? '✅ נמצא' : '❌ לא נמצא';
-  console.log('שמות (' + names.length + '): ' + names.join(' | '));
-  console.log(result + ': ' + testName);
-  // כותב לתא B2 בגיליון הזמינות כדי שתוכל לראות
-  sh.getRange(2, 2).setValue('[DEBUG] ' + result + ' | שמות: ' + names.join(', '));
-}
