@@ -1285,7 +1285,7 @@ function fillExternalJune() {
  * 21. ממשק שומר  
  * ============================================================ */  
 function doGet(e) {  
- const guardName = (e && e.parameter && e.parameter.guard) ? e.parameter.guard : '';  
+ const guardName = (e && e.parameter && e.parameter.guard) ? String(e.parameter.guard).trim().replace(/^["']+|["']+$/g, '').trim() : '';  
  const template = HtmlService.createTemplateFromFile('Index');  
  template.guardName = guardName;  
  return template.evaluate()  
@@ -1304,8 +1304,9 @@ function saveGuardPreferences(payload) {
 
     const lastCol = sh.getLastColumn();
     const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
-    const guardCol = headerRow.findIndex(h => String(h).trim() === String(payload.name).trim());
-    if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: ' + payload.name);
+    const guardCol = headerRow.findIndex(h => String(h).trim() === String(payload.guard || payload.name || '').trim());
+    const resolvedName = payload.guard || payload.name || '';
+    if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: ' + resolvedName);
 
     const sheetCol = 6 + guardCol;
     const blocks = buildBlocks_();
