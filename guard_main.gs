@@ -1353,3 +1353,18 @@ function saveGuardPreferences(payload) {
     throw new Error("לא הצלחנו לשמור: " + error.toString());
   }
 }
+
+/* ============================================================
+ * DEBUG — הרץ מ-Apps Script: בחר debugGuardLookup ← Run
+ * ============================================================ */
+function debugGuardLookup() {
+  const testName = 'הושעיה';
+  const mgmt = mgmt_();
+  const sh = mgmt.getSheetByName(SHEET_AVAIL);
+  if (!sh) { Logger.log('❌ גיליון זמינות לא נמצא'); return; }
+  const lastCol = sh.getLastColumn();
+  const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
+  Logger.log('שמות בגיליון: ' + JSON.stringify(headerRow));
+  const idx = headerRow.findIndex(h => String(h).trim() === testName);
+  Logger.log(idx >= 0 ? '✅ נמצא בעמודה ' + (6 + idx) : '❌ לא נמצא — בדוק איות');
+}
