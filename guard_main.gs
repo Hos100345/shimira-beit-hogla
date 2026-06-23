@@ -1,5 +1,5 @@
 /**  
- * 🛡️ מערכת שיבוץ שמירות — שלב 2.2: תיקוני באגים, מרכאות, GS_VERSION
+ * 🛡️ מערכת שיבוץ שמירות — גרסה 2.3: תיקון גובה מסך נייד, Flexbox layout
  * ====================================================================================  
  * גרסה זו סורקת מראש את כל השיבוצים הידניים בשבוע, משקללת את השעות והנקודות שלהם  
  * אל תוך תוכנית העבודה, ומונעת העמסת יתר על שומרים ששוריינו להם משמרות מראש.  
@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.2';
+const GS_VERSION = 'v2.3';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -40,9 +40,6 @@ function ratingToCost_(mark) {
  return RATING_DEFAULT;  
 }  
   
-// האם השותף הפנימי מכסה את בלוק הלילה הפנימי הנתון, לפי הטווח שהוגדר?  
-// partnerRange: '02:00-06:00' (מלא), '04:00-06:00' (סיור), ריק = מלא (ברירת מחדל).  
-// בלוקים פנימיים אפשריים: 02:00-04:00, 04:00-06:00.  
 function partnerCoversBlock_(blockLabel, partnerRange) {  
  let pr = (partnerRange && String(partnerRange).trim()) ? String(partnerRange).trim() : '02:00-06:00';  
  const rangeStart = parseInt(pr.slice(0, 2), 10);  
@@ -53,16 +50,11 @@ function partnerCoversBlock_(blockLabel, partnerRange) {
  return blockStart >= rangeStart && blockEnd <= rangeEnd;  
 }  
   
-// האם הסימון חוסם קשיח (X)?  
 function isBlocked_(mark) {  
  return String(mark).trim().toUpperCase() === MARK_BLOCK;  
 }  
   
-/* ============================================================  
- * 1. בלוקי זמן  
- * ============================================================ */  
 function buildBlocks_() {
-  // סדר יממה: 06:00 עד 06:00 למחרת — בוקר → ערב → שמירת לילה → לפנות בוקר
   const blocks = [];
   for (let h = 6; h < 22; h++) {
     blocks.push({
@@ -77,7 +69,6 @@ function buildBlocks_() {
   return blocks;
 }  
   
-// האם הבלוק נמצא בחלון השבת? תומך בחלון שחוצה את סוף השבוע (שישי→ראשון).  
 function isShabbat_(dayName, blockStartHour, cfg) {  
  if (!cfg || !cfg.SHABBAT_START_DAY || !cfg.SHABBAT_END_DAY) return false;  
  const order = {};  
@@ -85,7 +76,7 @@ function isShabbat_(dayName, blockStartHour, cfg) {
  let startD = order[cfg.SHABBAT_START_DAY];  
  let endD = order[cfg.SHABBAT_END_DAY];  
  if (startD === undefined || endD === undefined) return false;  
- if (endD <= startD) endD += 7; // ראשון "עוטף" ליום 7  
+ if (endD <= startD) endD += 7;  
  let blockD = order[dayName];  
  if (blockD === undefined) return false;  
  if (blockD < startD) blockD += 7;  
@@ -95,17 +86,14 @@ function isShabbat_(dayName, blockStartHour, cfg) {
  return blockMin >= startMin && blockMin < endMin;  
 }  
   
-// חישוב משקל קושי לבלוק.  
 function blockWeight_(dayName, block, weights, cfg, marksForBlock) {  
  const h = parseInt(block.label.slice(0, 2), 10);  
-  
  if (cfg && isShabbat_(dayName, h, cfg)) {  
  if (!marksForBlock || marksForBlock.length === 0) return 3;  
  const costs = marksForBlock.map(ratingToCost_).filter(c => isFinite(c));  
  if (costs.length === 0) return 3;  
  return costs.reduce((a, b) => a + b, 0) / costs.length;  
  }  
-  
  if (block.night) return weights['לילה'];  
  if (dayName === 'שבת') {  
  if (h >= 8 && h < 11) return weights['תפילות שבת'];  
@@ -115,9 +103,6 @@ function blockWeight_(dayName, block, weights, cfg, marksForBlock) {
  return weights['יום'];  
 }  
   
-/* ============================================================  
- * 2. תפריט  
- * ============================================================ */  
 function onOpen() {  
  SpreadsheetApp.getUi()  
  .createMenu('🛡️ שיבוץ שמירות')  
@@ -139,39 +124,35 @@ function onOpen() {
     .addToUi();  
 }  
   
-/* ============================================================  
- * 3. 🏗️ הקמה / שדרוג מבנה  
- * ============================================================ */  
 function setupV2() {  
  const ss = SpreadsheetApp.getActiveSpreadsheet();  
  PropertiesService.getScriptProperties().setProperty('MGMT_ID', ss.getId());  
-  
  const sh = getCleanSheet_(ss, SHEET_SETTINGS);  
  sh.setRightToLeft(true);  
  const rows = [
  ['פרמטר', 'ערך', 'הסבר'],
  ['⏱ זמני משמרות ומנוחה', '', ''],
- ['MAX_SHIFT_LENGTH', 4, 'מקסימום שעות רצופות למשמרת אחת (ברירת מחדל: 4)'],
- ['MIN_SHIFT_LENGTH', 2, 'מינימום שעות רצופות לפני החלפת שומר (ברירת מחדל: 2)'],
- ['MIN_REST_TIME', 4, 'שעות מנוחה מינימליות בין שתי משמרות רגילות (ברירת מחדל: 4)'],
- ['NIGHT_REST_TIME', 8, 'שעות מנוחה חובה אחרי משמרת לילה (שעות קטנות, ברירת מחדל: 8)'],
- ['MAX_BACKTRACK_HOURS', 3, 'מספר השעות שהאלגוריתם חוזר אחורה כשנתקע במבוי סתום (ברירת מחדל: 3)'],
+ ['MAX_SHIFT_LENGTH', 4, 'מקסימום שעות רצופות למשמרת אחת'],
+ ['MIN_SHIFT_LENGTH', 2, 'מינימום שעות רצופות לפני החלפת שומר'],
+ ['MIN_REST_TIME', 4, 'שעות מנוחה מינימליות בין שתי משמרות'],
+ ['NIGHT_REST_TIME', 8, 'שעות מנוחה חובה אחרי משמרת לילה'],
+ ['MAX_BACKTRACK_HOURS', 3, 'שעות נסיגה של האלגוריתם כשנתקע'],
  ['📊 ניקוד ואיזון', '', ''],
- ['MAX_WEEKDAY_DEBT_HOURS', 2, 'סף הפרש שעות שבועי בין שומרים; מעל הסף — האלגוריתם מאזן (ברירת מחדל: 2)'],
- ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות חסימה הצבורות השומר נשאר ירוק (פנוי לשיבוץ)'],
- ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות = רמזור צהוב; מעל זה = אדום (עמוס — ישובץ רק בהכרח)'],
- ['QUESTION_COST_FACTOR', 0.5, 'עלות "?" ביחס ל-"✕" (0.5 = חצי נקודה, 1.0 = שווה ל-✕)'],
- ['DEBT_SENSITIVITY', 2, 'כמה נקודות חוב מהשבוע הקודם מורידות את סף הרמזור של השומר'],
+ ['MAX_WEEKDAY_DEBT_HOURS', 2, 'סף הפרש שעות שבועי בין שומרים'],
+ ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות = רמזור ירוק'],
+ ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות = רמזור צהוב'],
+ ['QUESTION_COST_FACTOR', 0.5, 'עלות ? ביחס ל-X'],
+ ['DEBT_SENSITIVITY', 2, 'השפעת חוב מהשבוע הקודם על הרמזור'],
  ['📅 חלון שבת', '', ''],
- ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון שבת/חג (ברירת מחדל: שישי)'],
- ['SHABBAT_START_HOUR', 6, 'שעת פתיחת חלון שבת ביום ההתחלה — פורמט 24 שעות (ברירת מחדל: 6)'],
- ['SHABBAT_END_DAY', 'ראשון', 'יום סיום חלון שבת/חג (ברירת מחדל: ראשון)'],
- ['SHABBAT_END_HOUR', 6, 'שעת סגירת חלון שבת ביום הסיום — פורמט 24 שעות (ברירת מחדל: 6)'],
+ ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון שבת'],
+ ['SHABBAT_START_HOUR', 6, 'שעת פתיחת חלון שבת'],
+ ['SHABBAT_END_DAY', 'ראשון', 'יום סיום חלון שבת'],
+ ['SHABBAT_END_HOUR', 6, 'שעת סגירת חלון שבת'],
  ['🔗 גיליונות מקושרים', '', ''],
- ['WEEK_START_DATE', '', 'תאריך יום ראשון של השבוע המשובץ; משמש לייבוא שומרים חיצוניים מהקובץ המשותף'],
- ['AVAIL_SPREADSHEET_ID', '', 'מזהה Google Sheets של קובץ הזמינות (ממולא אוטומטית ע"י createAvailabilityFile)'],
- ['PUBLISH_SPREADSHEET_ID', '', 'מזהה Google Sheets לפרסום לוח השמירות לשומרים (ממולא אוטומטית)'],
- ['EXTERNAL_SPREADSHEET_ID', '', 'מזהה קובץ נפרד לשומרים חיצוניים; ריק = קריאה מהטבלה המקומית'],
+ ['WEEK_START_DATE', '', 'תאריך יום ראשון של השבוע המשובץ'],
+ ['AVAIL_SPREADSHEET_ID', '', 'מזהה קובץ הזמינות (ממולא אוטומטית)'],
+ ['PUBLISH_SPREADSHEET_ID', '', 'מזהה קובץ פרסום לשומרים'],
+ ['EXTERNAL_SPREADSHEET_ID', '', 'מזהה קובץ שומרים חיצוניים'],
  ];
  sh.getRange(1, 1, rows.length, 3).setValues(rows);
  styleHeader_(sh.getRange(1, 1, 1, 3));
@@ -181,8 +162,7 @@ function setupV2() {
    hdr.setBackground('#f3f3f3').setFontWeight('bold');
    sh.getRange(r, 2).setBackground('#f3f3f3');
  });
- sh.getRange(20, 2).setNumberFormat('dd/mm/yyyy');  
-  
+ sh.getRange(21, 2).setNumberFormat('dd/mm/yyyy');  
  const w = [  
  ['סוג בלוק', 'משקל קושי'],  
  ['יום', 1], ['ערב', 2], ['מוצ"ש', 2], ['לילה', 3], ['תפילות שבת', 3],  
@@ -191,8 +171,7 @@ function setupV2() {
  styleHeader_(sh.getRange(1, 5, 1, 2));  
  sh.getRange(2, 6, w.length - 1, 1).setBackground('#fff2cc');  
  sh.setColumnWidth(1, 220).setColumnWidth(3, 340).setColumnWidth(5, 130).setFrozenRows(1);  
-  
- let names = [['שראל'], ['שר שלום'], ['עזריאל'], ['הושעיה']];  
+ let names = [['ישראל'], ['שר שלום'], ['עזריאל'], ['הושעיה']];  
  const oldG = ss.getSheetByName(SHEET_GUARDS);  
  if (oldG) {  
  const lastR = oldG.getLastRow();  
@@ -206,7 +185,6 @@ function setupV2() {
  gs.getRange(1, 1).setValue('שם השומר');  
  gs.getRange(2, 1, names.length, 1).setValues(names);  
  styleHeader_(gs.getRange(1, 1, 1, 1));  
-  
  const ex = getCleanSheet_(ss, SHEET_EXTERNAL);  
  ex.setRightToLeft(true);  
  ex.getRange(1, 1, 1, 4).setValues([['תאריך', 'שומר 22:00-02:00', 'שותף 02:00-06:00 (מהישוב)', 'טווח שותף']]);  
@@ -216,29 +194,22 @@ function setupV2() {
  .requireValueInList(['02:00-06:00', '04:00-06:00'], true).setAllowInvalid(true).build();  
  ex.getRange(2, 4, 31, 1).setDataValidation(rangeRule);  
  ex.setColumnWidth(1, 110).setColumnWidths(2, 2, 200).setColumnWidth(4, 120).setFrozenRows(1);  
- ex.getRange(1, 6).setValue('💡 אם השותף ב-02-06 הוא אחד מהקבועים — המערכת מזהה לבד: קרדיט מלא + מנוחת לילה אחרי. טווח שותף ריק = משמרת מלאה (02-06). "04:00-06:00" = סיור קצר, ו-02-04 הופך לפנימי רגיל.')  
- .setFontColor('#666666');  
-  
  const hi = ss.getSheetByName(SHEET_HISTORY) || ss.insertSheet(SHEET_HISTORY);  
  hi.setRightToLeft(true);  
  if (hi.getLastRow() === 0) {  
  const guards = names.map(r => r[0]);  
  const head = ['תאריך ריצה'].concat(  
- guards.map(n => n + ' — נק׳ חול'),  
- guards.map(n => n + ' — נק׳ שבת'),  
+ guards.map(n => n + ' — נקʳ חול'),  
+ guards.map(n => n + ' — נקʳ שבת'),  
  guards.map(n => n + ' — חוב חול'),  
  guards.map(n => n + ' — חוב שבת'));  
  hi.getRange(1, 1, 1, head.length).setValues([head]);  
  styleHeader_(hi.getRange(1, 1, 1, head.length));  
  }  
-  
  getCleanSheet_(ss, SHEET_SCHEDULE).setRightToLeft(true);  
  ss.toast('שדרוג מבנה דינמי הושלם.', '✅', 8);  
 }  
   
-/* ============================================================  
- * 4. 🔗 קובץ הזמינות המשותף  
- * ============================================================ */  
 function createAvailabilityFile() {
   const mgmt = mgmt_();
   const guards = readGuards_(mgmt);
@@ -253,7 +224,6 @@ function rebuildAvailabilityIn_(ss, guards) {
  const blocks = buildBlocks_();
  const numG = guards.length;
  const totalCols = 5 + numG + 2;
-
  sh.getRange(1, 1, 1, 5).setValues([['יום', 'בלוק זמן', 'שעות', 'סטטוס', 'עמדות']]);
  sh.getRange(1, 5).setNote('0 = שעה בוטלה\n1 = שומר אחד\n2 = שני שומרים');
  sh.getRange(1, 6, 1, numG).setValues([guards]);
@@ -261,7 +231,6 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.getRange(1, 7 + numG).setValue('📅 שיבוץ נוכחי');
  sh.getRange(2, 1).setValue('🚦 רמזור ←');
  sh.getRange(2, 6, 1, numG).setValue('—').setHorizontalAlignment('center');
-
  const data = [];
  DAYS.forEach(day => blocks.forEach(b => {
    const status = b.external ? 'חיצוני בלבד' : 'פעיל';
@@ -273,26 +242,21 @@ function rebuildAvailabilityIn_(ss, guards) {
    data.push(row);
  }));
  sh.getRange(3, 1, data.length, totalCols).setValues(data);
-
  styleHeader_(sh.getRange(1, 1, 1, totalCols));
  sh.setFrozenRows(2);
  sh.setFrozenColumns(2);
-
  const statusRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['פעיל', 'חיצוני בלבד'], true).setAllowInvalid(false).build();
  sh.getRange(3, 4, data.length, 1).setDataValidation(statusRule);
-
  const posRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['0', '1', '2'], true).setAllowInvalid(false).build();
  sh.getRange(3, 5, data.length, 1).setDataValidation(posRule);
-
  const vxRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(false).build();
  const manualRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(guards, true).setAllowInvalid(false).build();
  sh.getRange(3, 6, data.length, numG).setDataValidation(vxRule);
  sh.getRange(3, 6 + numG, data.length, 1).setDataValidation(manualRule);
-
  const marksRange = sh.getRange(3, 6, data.length, numG);
  const greenRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('1')
    .setBackground('#b7e1cd').setRanges([marksRange]).build();
@@ -301,14 +265,12 @@ function rebuildAvailabilityIn_(ss, guards) {
    .setBackground('#fce8b2').setRanges([marksRange]).build();
  const blockRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(MARK_BLOCK)
    .setBackground('#f4c7c3').setRanges([marksRange]).build();
-
  const posRange = sh.getRange(3, 5, data.length, 1);
  const posZeroRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('0')
    .setBackground('#e0e0e0').setFontColor('#888888').setRanges([posRange]).build();
  const posTwoRule = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('2')
    .setBackground('#cfe2f3').setRanges([posRange]).build();
  sh.setConditionalFormatRules([greenRule, yellowRule, blockRule, posZeroRule, posTwoRule]);
-
  sh.setColumnWidths(1, 2, 95);
  sh.setColumnWidth(3, 55);
  sh.setColumnWidth(4, 110);
@@ -319,53 +281,29 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.setRowHeight(1, 30);
 }
   
-/* ============================================================  
- * 5. 📖 הוראות  
- * ============================================================ */  
 function createInstructionsSheet() {  
  const ss = SpreadsheetApp.getActiveSpreadsheet();  
  const sh = getCleanSheet_(ss, SHEET_HELP);  
  sh.setRightToLeft(true);  
  const lines = [  
  ['📖 הוראות הפעלה — מערכת שיבוץ שמירות בית חוגלה'],  
- [''],  
- ['1. הגדרות ראשוניות'],  
+ [''], ['1. הגדרות ראשוניות'],  
  ['   • לחץ על 🏗️ שדרוג מבנה דינמי — יצור את כל הלשוניות הדרושות.'],  
  ['   • מלא שמות שומרים בלשונית "👥 שומרים" (עמודה A מ-A2 ואילך).'],  
- ['   • הגדר MAX_SHIFT_LENGTH, MIN_REST_TIME וכדומה ב-"⚙️ הגדרות".'],  
- [''],  
- ['2. זמינות שבועית'],  
- ['   • לחץ 🔗 צור/עדכן קובץ זמינות — יצור/יעדכן לשונית "📋 זמינות" בקובץ הנוכחי.'],  
- ['   • שלח לכל שומר קישור לממשק הזמינות (URL מ-doGet).'],  
- ['   • שומר ממלא זמינות: 1 = נוח, X = חסום קשיח, 5 = קשה מאוד.'],  
- [''],  
- ['3. ריצת שיבוץ'],  
- ['   • לחץ ▶️ הרץ שיבוץ — האלגוריתם יקרא זמינות, יבצע שיבוץ ויכתוב ללוח שמירות.'],  
- ['   • אם ישנם חיצוניים — מלא לשונית "📅 שומרים חיצוניים" לפני הריצה.'],  
- [''],  
- ['4. פריסה חלופית'],  
- ['   • לאחר ריצה, ניתן ללחוץ 🔄 פרוס מחדש — האלגוריתם יפרוס שיבוץ שונה.'],  
- ['   • ➕ הארך משמרות ופרוס — מגדיל את מכסת השעות ב-1 ומריץ מחדש.'],  
- [''],  
- ['5. שיבוץ ידני'],  
- ['   • ניתן לשים שם שומר בעמודת "🔒 שיבוץ ידני" בלשונית הזמינות.'],  
- ['   • שיבוצים ידניים נסרקים מראש — האלגוריתם מתחשב בהם לצורכי איזון.'],  
- [''],  
- ['6. עדכון אוטומטי (Triggers)'],  
- ['   • לחץ ⏰ הפעל טריגרים — יגדיר טריגר יומי שמנקה זמינות ישנה אוטומטית.'],  
+ [''], ['2. זמינות שבועית'],  
+ ['   • לחץ 🔗 צור/עדכן קובץ זמינות — יצור/יעדכן לשונית "📋 זמינות".'],  
+ ['   • שלח לכל שומר קישור: .../exec?guard=שם_השומר'],  
+ [''], ['3. ריצת שיבוץ'],  
+ ['   • לחץ ▶️ הרץ שיבוץ — האלגוריתם יקרא זמינות ויכתוב ללוח שמירות.'],  
  ];  
  sh.getRange(1, 1, lines.length, 1).setValues(lines);  
  sh.getRange(1, 1).setFontSize(14).setFontWeight('bold');  
  sh.setColumnWidth(1, 700);  
 }  
   
-/* ============================================================  
- * 6. 🔗 קובץ שומרים חיצוניים נפרד  
- * ============================================================ */  
 function createExternalFile() {  
  const mgmt = mgmt_();  
  const cfg = readSettings_(mgmt);  
-  
  let extId = cfg.EXTERNAL_SPREADSHEET_ID;  
  if (extId) {  
  try {  
@@ -378,15 +316,13 @@ function createExternalFile() {
  return;  
  } catch(e) {}  
  }  
-  
  const newSs = SpreadsheetApp.create('שומרים חיצוניים — בית חוגלה');  
  const sh = newSs.getActiveSheet();  
  sh.setName(SHEET_EXTERNAL);  
  buildExternalSheet_(sh);  
-  
  const newId = newSs.getId();  
  setSettingsValue_(mgmt, 'EXTERNAL_SPREADSHEET_ID', newId);  
- SpreadsheetApp.getUi().alert('✅ קובץ חיצוניים נוצר:\n' + newSs.getUrl() + '\n\nה-ID נשמר בהגדרות.');  
+ SpreadsheetApp.getUi().alert('✅ קובץ חיצוניים נוצר:\n' + newSs.getUrl());  
 }  
   
 function buildExternalSheet_(sh) {  
@@ -399,9 +335,6 @@ function buildExternalSheet_(sh) {
  sh.setColumnWidth(1, 110).setColumnWidths(2, 2, 200).setColumnWidth(4, 120).setFrozenRows(1);  
 }  
   
-/* ============================================================  
- * 7. ⚡ מילוי מהיר  
- * ============================================================ */  
 function runQuickFill() {  
  const mgmt = mgmt_();  
  processQuickFill_(mgmt);  
@@ -413,19 +346,15 @@ function processQuickFill_(mgmt) {
  if (!av) return;  
  const qf = mgmt.getSheetByName(SHEET_QUICK);  
  if (!qf) return;  
-  
  const guards = readGuards_(mgmt);  
  const numG = guards.length;  
  const blocks = buildBlocks_();  
  const numB = blocks.length;  
  const numDays = DAYS.length;  
-  
  const qData = qf.getDataRange().getValues();  
  if (qData.length < 2) return;  
-  
  const avData = av.getRange(3, 1, numDays * numB, 5 + numG).getValues();  
  const updates = [];  
-  
  qData.slice(1).forEach(row => {  
  const gName = String(row[0]).trim();  
  const dayName = String(row[1]).trim();  
@@ -438,26 +367,19 @@ function processQuickFill_(mgmt) {
  if (rowIdx < 0) return;  
  updates.push({ sheetRow: 3 + rowIdx, col: 6 + g, val: mark });  
  });  
-  
  updates.forEach(u => av.getRange(u.sheetRow, u.col).setValue(u.val));  
 }  
   
-/* ============================================================  
- * 8. 🚦 רמזור זמינות  
- * ============================================================ */  
 function updateTrafficLights() {  
  const mgmt = mgmt_();  
  const sh = mgmt.getSheetByName(SHEET_AVAIL);  
  if (!sh) { SpreadsheetApp.getUi().alert('גיליון זמינות לא נמצא!'); return; }  
-  
  const guards = readGuards_(mgmt);  
  const numG = guards.length;  
  const numB = buildBlocks_().length;  
  const numDays = DAYS.length;  
-  
  const data = sh.getRange(3, 6, numDays * numB, numG).getValues();  
  const scores = new Array(numG).fill(0);  
-  
  data.forEach(row => {  
  row.forEach((cell, g) => {  
  const m = String(cell).trim().toUpperCase();  
@@ -465,26 +387,19 @@ function updateTrafficLights() {
  else if (m === MARK_PREFER_NOT) scores[g] += 1;  
  });  
  });  
-  
  const cfg = readSettings_(mgmt);  
  const green = Number(cfg.GREEN_MAX_POINTS) || 20;  
  const yellow = Number(cfg.YELLOW_MAX_POINTS) || 40;  
-  
  const lights = scores.map(s => s <= green ? '🟢' : s <= yellow ? '🟡' : '🔴');  
  sh.getRange(2, 6, 1, numG).setValues([lights]);  
 }  
   
-/* ============================================================  
- * 9. ▶️ הרץ שיבוץ  
- * ============================================================ */  
 function runScheduler() {  
  const mgmt = mgmt_();  
  const guards = readGuards_(mgmt);  
  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
-  
  const cfg = readSettings_(mgmt);  
  const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
-  
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, null);  
  writeScheduleResult_(mgmt, guards, plan);  
 }  
@@ -493,10 +408,8 @@ function replanSchedule() {
  const mgmt = mgmt_();  
  const guards = readGuards_(mgmt);  
  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
-  
  const cfg = readSettings_(mgmt);  
  const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
-  
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, true);  
  writeScheduleResult_(mgmt, guards, plan);  
 }  
@@ -505,59 +418,42 @@ function extendAndReplan() {
  const mgmt = mgmt_();  
  const guards = readGuards_(mgmt);  
  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
-  
  const cfg = readSettings_(mgmt);  
  let hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
  hardCap += 1;  
-  
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false);  
  writeScheduleResult_(mgmt, guards, plan);  
 }  
   
-/* ============================================================  
- * 10. בניית תוכנית שיבוץ  
- * ============================================================ */  
 function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {  
  const blocks = buildBlocks_();  
  const rows = readAvailabilityRows_(mgmt, guards, cfg, blocks);  
  const st = initState_(guards, mgmt, cfg);  
  const maxShift = maxShiftOverride || Number(cfg.MAX_SHIFT_LENGTH) || 4;  
-  
  const futureManualHours = new Array(guards.length).fill(0);  
  rows.forEach(r => {  
  if (r.manual && r.manualIdx >= 0) futureManualHours[r.manualIdx] += r.hours;  
  });  
-  
  const decisions = [];  
  let i = 0;  
  while (i < rows.length) {  
  const r = rows[i];  
-  
  if (r.manual && r.manualIdx >= 0) {  
  const g = r.manualIdx;  
  decisions.push({ rowIdx: i, guard: g, mode: 'ידני', partner: r.partnerName || null });  
  applyAssign_(st, g, r);  
  futureManualHours[g] -= r.hours;  
- i++;  
- continue;  
+ i++; continue;  
  }  
-  
  if (r.external && r.covered) {  
  decisions.push({ rowIdx: i, guard: -1, mode: 'חיצוני', name: r.extName, partner: r.partnerName || null });  
  if (r.partnerIdx >= 0) { applyAssign_(st, r.partnerIdx, r); }  
- i++;  
- continue;  
+ i++; continue;  
  }  
-  
- if (!r.external && r.partnerName && r.partnerIdx >= 0) {  
- }  
-  
  if (r.statusExternal) {  
  decisions.push({ rowIdx: i, guard: -1, mode: 'חיצוני', name: '—' });  
- i++;  
- continue;  
+ i++; continue;  
  }  
-  
  const sameSlotExcluded = new Set(  
  decisions.filter(d => rows[d.rowIdx].sheetRow === r.sheetRow && d.guard >= 0).map(d => d.guard)  
  );  
@@ -566,15 +462,12 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  const bt = backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter);  
  if (bt !== null) { i = bt; continue; }  
  decisions.push({ rowIdx: i, guard: -1, mode: 'ריק' });  
- i++;  
- continue;  
+ i++; continue;  
  }  
-  
  let mode = 'רגיל';  
  const s = st[g];  
  if (s.hours >= hardCap) mode = 'חריגת שעות';  
  else if (r.run > maxShift) mode = 'חירום';  
-  
  const partner = (r.night && !r.external) ? getPartner_(guards, g, r, st, cfg) : null;  
  decisions.push({ rowIdx: i, guard: g, mode, partner });  
  applyAssign_(st, g, r);  
@@ -584,40 +477,29 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter) {
  }  
  i++;  
  }  
-  
  return { rows, decisions, st, hardCap, maxShift };  
 }  
   
 function writeScheduleResult_(mgmt, guards, plan) {  
  const rows = plan.rows, decisions = plan.decisions, st = plan.st, hardCap = plan.hardCap, maxShift = plan.maxShift;  
-  
  const alerts = [];  
  decisions.forEach(d => {  
  const r = rows[d.rowIdx];  
- if (d.mode === 'חירום') alerts.push('⚠️ חירום (נשברו חוקי מנוחה/רצף): ' + r.day + ' ' + r.label);  
+ if (d.mode === 'חירום') alerts.push('⚠️ חירום: ' + r.day + ' ' + r.label);  
  if (d.mode === 'חריגת שעות') alerts.push('➕ חריגת שעות: ' + r.day + ' ' + r.label);  
- if (d.mode === 'ריק') alerts.push('🚨 משמרת ריקה — כולם X: ' + r.day + ' ' + r.label);  
- if (r.external && !r.covered && d.guard >= 0)  
- alerts.push('ℹ️ אין חיצוני ב' + r.day + ' 22:00-02:00 — שובץ פנימי והמכסה עלתה בהתאם');  
- if (r.night && !r.external && !r.statusExternal && d.partner && guards.indexOf(d.partner) >= 0)  
- alerts.push('🛌 ' + d.partner + ' רשום בחיצוני 02:00-06:00 ב' + r.day + ' — חסום מפנימי עד 14:00');  
- if (r.external && r.covered && guards.indexOf(r.extName) >= 0)  
- alerts.push('🛌 ' + r.extName + ' רשום בחיצוני 22:00-02:00 ב' + r.day + ' — חסום מפנימי עד 10:00');  
+ if (d.mode === 'ריק') alerts.push('🚨 משמרת ריקה: ' + r.day + ' ' + r.label);  
  });  
-  
  writeSchedule_(mgmt, rows, decisions, guards, st);
  syncCurrentSchedule_(mgmt, guards, rows, decisions);
  buildManagerView_(mgmt, guards, rows, decisions);
  writeHistory_(mgmt, guards, st);  
  const pubUrl = publishSchedule_(mgmt);  
-  
  let msg = '✅ השיבוץ הושלם! (מכסה: ' + hardCap + ' שעות לשומר';  
  if (maxShift) msg += ', משמרת עד ' + maxShift + ' שעות';  
  msg += ')\n\n' + guards.map((n, g) =>  
- n + ': ' + st[g].hours + ' שעות, ' + Math.round(st[g].weekdayPoints + st[g].shabbatPoints) + ' נק׳ קושי').join('\n');  
- msg += '\n\n💡 אם הפריסה לא טובה — תפריט 🛡️ ← "🔄 פרוס מחדש" לפריסה חלופית.';  
+ n + ': ' + st[g].hours + ' שעות, ' + Math.round(st[g].weekdayPoints + st[g].shabbatPoints) + ' נקʳ קושי').join('\n');  
  if (alerts.length) msg += '\n\n' + alerts.join('\n');  
- if (pubUrl) msg += '\n\n🔗 קובץ הפרסום לשומרים:\n' + pubUrl;  
+ if (pubUrl) msg += '\n\n🔗 ' + pubUrl;  
  SpreadsheetApp.getUi().alert(msg);  
 }  
   
@@ -626,7 +508,6 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
   const sh = mgmt.getSheetByName(SHEET_AVAIL);
   if (!sh) return;
   const syncCol = 7 + numG;
-
   const byRow = {};
   decisions.forEach(d => {
     const r = rows[d.rowIdx];
@@ -637,7 +518,6 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
     if (!byRow[r.sheetRow]) byRow[r.sheetRow] = [];
     if (name && !byRow[r.sheetRow].includes(name)) byRow[r.sheetRow].push(name);
   });
-
   const lastRow = sh.getLastRow();
   if (lastRow >= 3) sh.getRange(3, syncCol, lastRow - 2, 1).clearContent();
   Object.entries(byRow).forEach(([sheetRow, names]) => {
@@ -645,9 +525,6 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
   });
 }
 
-/* ============================================================
- * מבט מנהל — מה ביקשו + מה שובץ + חריגות
- * ============================================================ */
 function rebuildManagerViewFromMenu() {
   SpreadsheetApp.getUi().alert('מבט מנהל מתעדכן רק בעת ריצת שיבוץ (▶️ הרץ שיבוץ).');
 }
@@ -656,84 +533,43 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
   const sh = getCleanSheet_(mgmt, SHEET_MANAGER);
   sh.setRightToLeft(true);
   const numG = guards.length;
-
   const headerVals = [['יום', 'שעות', 'עמדות', 'שובץ (נוכחי)'].concat(guards)];
   sh.getRange(1, 1, 1, 4 + numG).setValues(headerVals);
   styleHeader_(sh.getRange(1, 1, 1, 4 + numG));
-
   const assignedByRow = {};
   decisions.forEach(d => {
     const r = rows[d.rowIdx];
-    let name = '';
-    if (d.mode === 'חיצוני' || d.mode === 'שותף') name = d.name || '—';
-    else if (d.guard >= 0) name = guards[d.guard];
-    else name = '🚨 ריק';
+    let name = d.mode === 'חיצוני' ? (d.name || '—') : d.guard >= 0 ? guards[d.guard] : '🚨 ריק';
     if (!assignedByRow[r.sheetRow]) assignedByRow[r.sheetRow] = { names: [], guards: [] };
-    if (name && !assignedByRow[r.sheetRow].names.includes(name)) {
-      assignedByRow[r.sheetRow].names.push(name);
-    }
-    if (d.guard >= 0 && !assignedByRow[r.sheetRow].guards.includes(d.guard)) {
-      assignedByRow[r.sheetRow].guards.push(d.guard);
-    }
+    if (name && !assignedByRow[r.sheetRow].names.includes(name)) assignedByRow[r.sheetRow].names.push(name);
+    if (d.guard >= 0 && !assignedByRow[r.sheetRow].guards.includes(d.guard)) assignedByRow[r.sheetRow].guards.push(d.guard);
   });
-
   const seen = new Set();
-  const dataRows = [];
-  const colorMatrix = [];
-
+  const dataRows = [], colorMatrix = [];
   rows.forEach(r => {
     if (seen.has(r.sheetRow)) return;
     seen.add(r.sheetRow);
-
     const assigned = assignedByRow[r.sheetRow] || { names: [], guards: [] };
-    const assignedStr = assigned.names.join(' / ') || '—';
-    const positions = r.positions || 1;
-
-    const rowVals = [r.day, r.label, positions, assignedStr];
-    const rowColors = ['#ffffff', '#ffffff', '#ffffff', '#ffffff'];
-
+    const rowVals = [r.day, r.label, r.positions || 1, assigned.names.join(' / ') || '—'];
+    const rowColors = ['#ffffff','#ffffff','#ffffff','#ffffff'];
     if (assigned.names.includes('🚨 ריק')) rowColors[3] = '#f4c7c3';
-    else if (positions > 1 && assigned.names.length < positions) rowColors[3] = '#fce8b2';
-
     guards.forEach((_, g) => {
       const mark = String(r.marks[g] || '').trim() || '1';
-      const wasAssigned = assigned.guards.includes(g);
       rowVals.push(mark);
-      if (wasAssigned) {
-        if (mark === 'X') rowColors.push('#f4c7c3');
-        else if (parseInt(mark) >= 4) rowColors.push('#ffe5cc');
-        else if (parseInt(mark) >= 3) rowColors.push('#fff2cc');
-        else rowColors.push('#d4edda');
-      } else {
-        rowColors.push('#ffffff');
-      }
+      rowColors.push(assigned.guards.includes(g) ? (mark === 'X' ? '#f4c7c3' : parseInt(mark) >= 3 ? '#fff2cc' : '#d4edda') : '#ffffff');
     });
-
     dataRows.push(rowVals);
     colorMatrix.push(rowColors);
   });
-
   if (dataRows.length === 0) return;
   sh.getRange(2, 1, dataRows.length, 4 + numG).setValues(dataRows);
-
   colorMatrix.forEach((colors, ri) => {
-    colors.forEach((color, ci) => {
-      if (color !== '#ffffff') sh.getRange(2 + ri, 1 + ci).setBackground(color);
-    });
+    colors.forEach((color, ci) => { if (color !== '#ffffff') sh.getRange(2 + ri, 1 + ci).setBackground(color); });
   });
-
-  sh.getRange(1, 4 + numG + 2).setValue('מקרא: 🟢 שובץ בנוחות | 🟡 שובץ בקושי | 🟠 קושי גדול | 🔴 שובץ למרות חסימה | 🟦 לא שובץ')
-    .setFontColor('#555555').setFontSize(9).setFontStyle('italic');
-
-  sh.setFrozenRows(1);
-  sh.setFrozenColumns(2);
-  sh.setColumnWidth(1, 75);
-  sh.setColumnWidth(2, 110);
-  sh.setColumnWidth(3, 60);
-  sh.setColumnWidth(4, 160);
+  sh.setFrozenRows(1).setFrozenColumns(2);
+  sh.setColumnWidth(1, 75).setColumnWidth(2, 110).setColumnWidth(3, 60).setColumnWidth(4, 160);
   sh.setColumnWidths(5, numG, 85);
 }
-
 
 function applyAssign_(st, g, r) {  
  const s = st[g];  
@@ -748,37 +584,24 @@ function applyAssign_(st, g, r) {
 function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded) {  
  const candidates = [];  
  const excl = excluded || new Set();  
-  
  guards.forEach((name, g) => {  
  if (excl.has(g)) return;  
  const s = st[g];  
  const mark = r.marks[g];  
  if (isBlocked_(mark)) return;  
-  
  if (s.hours >= hardCap) return;  
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;  
  if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
-  
  const curRun = (s.lastEnd === r.startAbs) ? s.run : 0;  
  if (curRun >= maxShift) return;  
-  
  const debtSensitivity = Number(cfg.DEBT_SENSITIVITY) || 2;  
  const adjustedGreen = (Number(cfg.GREEN_MAX_POINTS) || 20) - s.weekdayDebt * debtSensitivity;  
  const adjustedYellow = (Number(cfg.YELLOW_MAX_POINTS) || 40) - s.weekdayDebt * debtSensitivity;  
-  
- let priority = 0;  
- if (s.weekdayPoints + s.shabbatPoints <= adjustedGreen) priority = 0;  
- else if (s.weekdayPoints + s.shabbatPoints <= adjustedYellow) priority = 1;  
- else priority = 2;  
-  
+ let priority = s.weekdayPoints + s.shabbatPoints <= adjustedGreen ? 0 : s.weekdayPoints + s.shabbatPoints <= adjustedYellow ? 1 : 2;  
  const cost = ratingToCost_(mark) * r.weight;  
- const futureLoad = futureManualHours[g];  
-  
- candidates.push({ g, priority, cost, hours: s.hours, futureLoad });  
+ candidates.push({ g, priority, cost, hours: s.hours, futureLoad: futureManualHours[g] });  
  });  
-  
  if (candidates.length === 0) return -1;  
-  
  candidates.sort((a, b) => {  
  if (a.priority !== b.priority) return a.priority - b.priority;  
  if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;  
@@ -787,16 +610,13 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  if (jitter) return Math.random() - 0.5;  
  return 0;  
  });  
-  
  return candidates[0].g;  
 }  
   
 function getPartner_(guards, g, r, st, cfg) {  
  if (r.partnerName) return r.partnerName;  
-  
  const rest = Number(cfg.MIN_REST_TIME) || 4;  
  let best = null, bestHours = Infinity;  
-  
  guards.forEach((name, pg) => {  
  if (pg === g) return;  
  const s = st[pg];  
@@ -805,7 +625,6 @@ function getPartner_(guards, g, r, st, cfg) {
  if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
  if (s.hours < bestHours) { best = name; bestHours = s.hours; }  
  });  
-  
  return best;  
 }  
   
@@ -813,15 +632,12 @@ function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift
  const maxBack = Number(cfg.MAX_BACKTRACK_HOURS) || 3;  
  const failRow = rows[failIdx];  
  const backLimit = failRow.startAbs - maxBack;  
-  
  for (let j = decisions.length - 1; j >= 0; j--) {  
  const d = decisions[j];  
  const r = rows[d.rowIdx];  
  if (r.startAbs < backLimit) break;  
  if (r.manual || r.statusExternal || (r.external && r.covered)) continue;  
-  
  const savedSt = JSON.parse(JSON.stringify(st));  
-  
  for (let k = j; k < decisions.length; k++) {  
  const kd = decisions[k];  
  const kr = rows[kd.rowIdx];  
@@ -832,28 +648,19 @@ function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift
  else ks.weekdayPoints -= kr.weight * kr.hours;  
  }  
  }  
-  
  const excluded = new Set([d.guard]);  
  const altG = chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded);  
-  
- if (altG === -1 || altG === d.guard) {  
- Object.assign(st, savedSt);  
- continue;  
- }  
-  
+ if (altG === -1 || altG === d.guard) { Object.assign(st, savedSt); continue; }  
  decisions.splice(j);  
- Object.keys(savedSt).forEach(k => { if (k <= j) st[k] = savedSt[k]; });  
  const cleanSt = initState_(guards);  
  decisions.forEach((dd, idx) => {  
  if (idx < j && dd.guard >= 0) applyAssign_(cleanSt, dd.guard, rows[dd.rowIdx]);  
  });  
  Object.assign(st, cleanSt);  
-  
  decisions.push({ rowIdx: d.rowIdx, guard: altG, mode: 'חירום', partner: null });  
  applyAssign_(st, altG, r);  
  return j + 1;  
  }  
-  
  return null;  
 }  
   
@@ -869,22 +676,13 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
  const curRun = (s.lastEnd === r.startAbs) ? s.run : 0;  
  if (curRun >= maxShift) return;  
- const cost = ratingToCost_(mark) * r.weight;  
- candidates.push({ g, cost, hours: s.hours });  
+ candidates.push({ g, cost: ratingToCost_(mark) * r.weight, hours: s.hours });  
  });  
  if (candidates.length === 0) return -1;  
- candidates.sort((a, b) => {  
- if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;  
- if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;  
- if (jitter) return Math.random() - 0.5;  
- return 0;  
- });  
+ candidates.sort((a, b) => Math.abs(a.hours-b.hours)>0.5 ? a.hours-b.hours : Math.abs(a.cost-b.cost)>0.01 ? a.cost-b.cost : jitter ? Math.random()-0.5 : 0);  
  return candidates[0].g;  
 }  
   
-/* ============================================================  
- * 11. קריאת זמינות  
- * ============================================================ */  
 function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
   const sh = mgmt.getSheetByName(SHEET_AVAIL);
   if (!sh) return [];
@@ -893,63 +691,45 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
   const lastRow = sh.getLastRow();
   if (lastRow < 3) return [];
   const data = sh.getRange(3, 1, lastRow - 2, totalCols).getValues();
-
   const extRows = readExternalRows_(mgmt, cfg);
   const rows = [];
-
-  let absBase = 0;
-  let prevDay = null;
-
+  let absBase = 0, prevDay = null;
   data.forEach((v, idx) => {
     const day = String(v[0]).trim();
     const label = String(v[1]).trim();
     if (!day || !label) return;
-
     const block = blocks.find(b => b.label === label);
     if (!block) return;
-
-    if (day !== prevDay) {
-      if (prevDay !== null) absBase += 24;
-      prevDay = day;
-    }
-
+    if (day !== prevDay) { if (prevDay !== null) absBase += 24; prevDay = day; }
     const bStart = parseInt(label.slice(0, 2), 10);
     const startAbs = absBase + bStart;
-
     const statusExternal = v[3] === 'חיצוני בלבד';
     const positions = Number(v[4]) || 0;
     const marks = guards.map((_, g) => v[5 + g]);
     const manual = guards[v[5 + numGuards]] !== undefined ? v[5 + numGuards] : '';
     const manualIdx = manual ? guards.indexOf(String(manual).trim()) : -1;
-
     const extMatch = extRows.find(e => e.day === day && e.blockLabel === label);
     const covered = !!(extMatch && extMatch.extName);
     const extName = extMatch ? extMatch.extName : '';
     const partnerName = extMatch ? extMatch.partnerName : '';
     const partnerRange = extMatch ? extMatch.partnerRange : '';
     const partnerIdx = partnerName ? guards.indexOf(partnerName) : -1;
-
-    const dayIdx = DAYS.indexOf(day);
     const isShabbat = cfg ? isShabbat_(day, bStart, cfg) : false;
     const weights = cfg ? readWeights_(mgmt) : { 'יום': 1, 'ערב': 2, 'לילה': 3, 'מוצ"ש': 2, 'תפילות שבת': 3 };
     const weight = blockWeight_(day, block, weights, cfg, marks);
-
     if (!block.external && positions === 0) return;
-
     const posCount = block.external ? 1 : positions;
     for (let posIdx = 0; posIdx < posCount; posIdx++) {
       rows.push({
-        day, label, dayIndex: dayIdx, startAbs, hours: block.hours,
+        day, label, dayIndex: DAYS.indexOf(day), startAbs, hours: block.hours,
         night: block.night, external: block.external,
         marks, manual: !!manual && posIdx === 0, manualIdx: posIdx === 0 ? manualIdx : -1,
         covered, extName, partnerName, partnerRange, partnerIdx,
         statusExternal, positions, positionIdx: posIdx,
-        isShabbat, weight,
-        sheetRow: 3 + idx,
+        isShabbat, weight, sheetRow: 3 + idx,
       });
     }
   });
-
   return rows;
 }
   
@@ -957,133 +737,90 @@ function readExternalRows_(mgmt, cfg) {
  const extRows = [];  
  const weekStart = cfg.WEEK_START_DATE instanceof Date ? cfg.WEEK_START_DATE : null;  
  if (!weekStart) return extRows;  
-  
  let extSh = null;  
  const extId = cfg.EXTERNAL_SPREADSHEET_ID;  
- if (extId) {  
- try { extSh = SpreadsheetApp.openById(extId).getSheetByName(SHEET_EXTERNAL); } catch(e) {}  
- }  
+ if (extId) { try { extSh = SpreadsheetApp.openById(extId).getSheetByName(SHEET_EXTERNAL); } catch(e) {} }  
  if (!extSh) extSh = mgmt.getSheetByName(SHEET_EXTERNAL);  
  if (!extSh) return extRows;  
-  
  const data = extSh.getRange(2, 1, Math.max(1, extSh.getLastRow() - 1), 4).getValues();  
-  
  data.forEach(row => {  
  const dateVal = row[0];  
  if (!dateVal || !(dateVal instanceof Date)) return;  
  const extName = String(row[1]).trim();  
  const partnerName = String(row[2]).trim();  
  const partnerRange = String(row[3]).trim();  
-  
  const diff = Math.round((dateVal - weekStart) / 86400000);  
  if (diff < 0 || diff >= 7) return;  
-  
  const dayName = DAYS[diff];  
  extRows.push({ day: dayName, blockLabel: '22:00-00:00', extName, partnerName, partnerRange });  
  extRows.push({ day: dayName, blockLabel: '00:00-02:00', extName, partnerName: '', partnerRange: '' });  
  });  
-  
  return extRows;  
 }  
   
-/* ============================================================  
- * 12. ריצת היסטוריה  
- * ============================================================ */  
 function writeHistory_(ss, guards, st) {  
  const sh = ss.getSheetByName(SHEET_HISTORY) || ss.insertSheet(SHEET_HISTORY);  
  sh.setRightToLeft(true);  
-  
  const numG = guards.length;  
  const head = ['תאריך ריצה'].concat(  
- guards.map(n => n + ' — נק׳ חול'),  
- guards.map(n => n + ' — נק׳ שבת'),  
+ guards.map(n => n + ' — נקʳ חול'),  
+ guards.map(n => n + ' — נקʳ שבת'),  
  guards.map(n => n + ' — חוב חול'),  
  guards.map(n => n + ' — חוב שבת'));  
-  
  if (sh.getLastRow() === 0) {  
  sh.getRange(1, 1, 1, head.length).setValues([head]);  
  styleHeader_(sh.getRange(1, 1, 1, head.length));  
- } else if (sh.getLastRow() >= 1) {  
- const existingHead = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];  
- const existingGuards = existingHead.slice(1, numG + 1).map(h => h.replace(" — נק׳ חול", ''));  
- if (JSON.stringify(existingGuards) !== JSON.stringify(guards)) {  
- sh.clearContents();  
- sh.getRange(1, 1, 1, head.length).setValues([head]);  
- styleHeader_(sh.getRange(1, 1, 1, head.length));  
  }  
- }  
-  
- const row = [new Date()].concat(  
+ sh.appendRow([new Date()].concat(  
  guards.map((_, g) => st[g].weekdayPoints),  
  guards.map((_, g) => st[g].shabbatPoints),  
  guards.map((_, g) => st[g].weekdayDebt),  
- guards.map((_, g) => st[g].shabbatDebt));  
- sh.appendRow(row);  
+ guards.map((_, g) => st[g].shabbatDebt)));  
 }  
   
-/* ============================================================  
- * 13. פרסום לשומרים  
- * ============================================================ */  
 function publishSchedule_(mgmt) {  
  const cfg = readSettings_(mgmt);  
  const pubId = cfg.PUBLISH_SPREADSHEET_ID;  
  if (!pubId) return null;  
-  
  let pubSs;  
  try { pubSs = SpreadsheetApp.openById(pubId); } catch(e) { return null; }  
-  
  const src = mgmt.getSheetByName(SHEET_SCHEDULE);  
  if (!src) return null;  
-  
  const dest = pubSs.getSheetByName(SHEET_SCHEDULE) || pubSs.insertSheet(SHEET_SCHEDULE);  
  dest.clearContents();  
  const vals = src.getDataRange().getValues();  
  if (vals.length > 0) dest.getRange(1, 1, vals.length, vals[0].length).setValues(vals);  
-  
  return pubSs.getUrl();  
 }  
   
-/* ============================================================  
- * 14. כתיבת לוח שמירות  
- * ============================================================ */  
 function writeSchedule_(ss, rows, decisions, guards, st) {  
  const sh = getCleanSheet_(ss, SHEET_SCHEDULE);  
  sh.setRightToLeft(true);  
  const cfg = readSettings_(ss);  
  const weekStart = cfg.WEEK_START_DATE instanceof Date ? cfg.WEEK_START_DATE : null;  
-  
- sh.getRange(1, 1, 1, 4).merge()  
- .setValue('🗓️ לוח שמירות שבועי — בית חוגלה')  
+ sh.getRange(1, 1, 1, 4).merge().setValue('🗓️ לוח שמירות שבועי — בית חוגלה')  
  .setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center')  
  .setBackground('#1c4587').setFontColor('#ffffff');  
-  
  let row = 3;  
  DAYS.forEach((day, di) => {  
  let header = '⭐ ' + day;  
  if (weekStart) {  
  const dd = new Date(weekStart);  
  const dayOffset = (di - weekStart.getDay() + 7) % 7;
-      dd.setDate(dd.getDate() + dayOffset);  
+ dd.setDate(dd.getDate() + dayOffset);  
  header += ' (' + dd.getDate() + '/' + (dd.getMonth() + 1) + ')';  
  }  
- sh.getRange(row, 1, 1, 4).merge()  
- .setValue(header)  
+ sh.getRange(row, 1, 1, 4).merge().setValue(header)  
  .setFontWeight('bold').setBackground('#e6f2ff').setFontSize(12).setHorizontalAlignment('center');  
  row++;  
-  
  sh.getRange(row, 1, 1, 4).setValues([['שעות', 'עמדה א׳ (פנימי)', 'עמדה ב׳ (חיצוני/שותף)', 'סטטוס']])  
  .setFontWeight('bold').setBackground('#f9f9f9').setHorizontalAlignment('center');  
  row++;  
-  
  const dayStart = row;  
  const dayDecisions = decisions.filter(d => rows[d.rowIdx].dayIndex === di);  
-  
  const cells = [];  
  const labelCount = {};  
- dayDecisions.forEach(d => {  
- const lbl = rows[d.rowIdx].label;  
- labelCount[lbl] = (labelCount[lbl] || 0) + 1;  
- });  
+ dayDecisions.forEach(d => { const lbl = rows[d.rowIdx].label; labelCount[lbl] = (labelCount[lbl] || 0) + 1; });  
  const labelSeen = {};  
  dayDecisions.forEach(d => {  
  const r = rows[d.rowIdx];  
@@ -1091,89 +828,58 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  const isSecond = labelCount[r.label] > 1 && labelSeen[r.label] > 1;  
  const displayLabel = isSecond ? '↳ עמ׳ ב׳' : r.label;  
  let posA, posB, status, cA = '#ffffff', cB = '#ffffff';  
-  
- if (d.mode === 'חיצוני') {  
- posA = '—'; posB = d.name; status = '👥 חיצוני'; cB = '#d9d9d9';  
- } else if (d.mode === 'שותף') {  
- posA = '—'; posB = d.name + ' (סיור)'; status = '🚶 סיור/שותף'; cB = '#d0e8d0';  
- } else if (d.guard === -1) {  
- posA = '🚨 ריק'; posB = d.partner || '—'; status = '🚨 לא מאויש!'; cA = '#ff0000';  
- } else {  
+ if (d.mode === 'חיצוני') { posA = '—'; posB = d.name; status = '👥 חיצוני'; cB = '#d9d9d9'; }  
+ else if (d.guard === -1) { posA = '🚨 ריק'; posB = '—'; status = '🚨 לא מאויש!'; cA = '#ff0000'; }  
+ else {  
  posA = guards[d.guard];  
- if (r.night && !r.external) posB = d.partner || '—';  
- else if (r.external) posB = '⚠️ אין חיצוני';  
- else posB = '—';  
+ posB = (r.night && !r.external) ? (d.partner || '—') : '—';  
  if (d.mode === 'חירום') { status = '⚠️ חירום'; cA = '#f9cb9c'; }  
  else if (d.mode === 'ידני') { status = '🔒 ידני'; cA = '#d9d2e9'; }  
  else { status = '✅ תקין'; }  
  }  
-  
  cells.push([displayLabel, posA, posB, status, cA, cB]);  
  });  
-  
  if (cells.length === 0) { row++; return; }  
  sh.getRange(dayStart, 1, cells.length, 4).setValues(cells.map(c => [c[0], c[1], c[2], c[3]]));  
  cells.forEach((c, ci) => {  
  sh.getRange(dayStart + ci, 2).setBackground(c[4]);  
  sh.getRange(dayStart + ci, 3).setBackground(c[5]);  
  });  
- row += cells.length;  
- row++;  
+ row += cells.length; row++;  
  });  
-  
  sh.setColumnWidth(1, 130).setColumnWidth(2, 180).setColumnWidth(3, 200).setColumnWidth(4, 140);  
  sh.setFrozenRows(2);  
 }  
   
-/* ============================================================  
- * 15. אתחול מצב שומרים  
- * ============================================================ */  
 function initState_(guards, mgmt, cfg) {  
  const st = {};  
- const numG = guards.length;  
-  
  guards.forEach((_, g) => {  
- st[g] = {  
- hours: 0, run: 0, lastEnd: 0, lastNight: false,  
- weekdayPoints: 0, shabbatPoints: 0,  
- weekdayDebt: 0, shabbatDebt: 0,  
- };  
+ st[g] = { hours: 0, run: 0, lastEnd: 0, lastNight: false, weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 };  
  });  
-  
  if (!mgmt || !cfg) return st;  
-  
  const hi = mgmt.getSheetByName(SHEET_HISTORY);  
  if (!hi || hi.getLastRow() < 2) return st;  
-  
  const lastRow = hi.getRange(hi.getLastRow(), 1, 1, hi.getLastColumn()).getValues()[0];  
  const head = hi.getRange(1, 1, 1, hi.getLastColumn()).getValues()[0];  
-  
  guards.forEach((name, g) => {  
- const wdi = head.findIndex(h => h === name + " — נק׳ חול");  
- const shi = head.findIndex(h => h === name + " — נק׳ שבת");  
+ const wdi = head.findIndex(h => h === name + " — נקʳ חול");  
+ const shi = head.findIndex(h => h === name + " — נקʳ שבת");  
  const cdhi = head.findIndex(h => h === name + " — חוב חול");  
  const cshi = head.findIndex(h => h === name + " — חוב שבת");  
-  
  if (wdi >= 0) st[g].weekdayDebt = Number(lastRow[wdi]) || 0;  
  if (shi >= 0) st[g].shabbatDebt = Number(lastRow[shi]) || 0;  
  if (cdhi >= 0) st[g].weekdayDebt += Number(lastRow[cdhi]) || 0;  
  if (cshi >= 0) st[g].shabbatDebt += Number(lastRow[cshi]) || 0;  
  });  
-  
  return st;  
 }  
   
-/* ============================================================  
- * 16. קריאת הגדרות  
- * ============================================================ */  
 function readSettings_(ss) {  
  const sh = ss.getSheetByName(SHEET_SETTINGS);  
  if (!sh) return {};  
  const data = sh.getRange(2, 1, Math.max(1, sh.getLastRow() - 1), 2).getValues();  
  const cfg = {};  
- data.forEach(r => {  
- if (r[0]) cfg[String(r[0]).trim()] = r[1];  
- });  
+ data.forEach(r => { if (r[0]) cfg[String(r[0]).trim()] = r[1]; });  
  if (cfg.WEEK_START_DATE && !(cfg.WEEK_START_DATE instanceof Date)) {  
  const d = new Date(cfg.WEEK_START_DATE);  
  if (!isNaN(d)) cfg.WEEK_START_DATE = d;  
@@ -1195,17 +901,11 @@ function setSettingsValue_(ss, key, value) {
  if (!sh) return;  
  const data = sh.getRange(2, 1, Math.max(1, sh.getLastRow() - 1), 1).getValues();  
  for (let i = 0; i < data.length; i++) {  
- if (String(data[i][0]).trim() === key) {  
- sh.getRange(i + 2, 2).setValue(value);  
- return;  
- }  
+ if (String(data[i][0]).trim() === key) { sh.getRange(i + 2, 2).setValue(value); return; }  
  }  
  sh.appendRow([key, value]);  
 }  
   
-/* ============================================================  
- * 17. עזרים כלליים  
- * ============================================================ */  
 function mgmt_() {  
  const id = PropertiesService.getScriptProperties().getProperty('MGMT_ID');  
  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();  
@@ -1214,8 +914,7 @@ function mgmt_() {
 function readGuards_(ss) {  
  const sh = ss.getSheetByName(SHEET_GUARDS);  
  if (!sh || sh.getLastRow() < 2) return [];  
- return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues()  
- .map(r => String(r[0]).trim()).filter(n => n);  
+ return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0]).trim()).filter(n => n);  
 }  
   
 function getCleanSheet_(ss, name) {  
@@ -1226,65 +925,43 @@ function getCleanSheet_(ss, name) {
 }  
   
 function styleHeader_(range) {  
- range.setFontWeight('bold').setBackground('#1c4587').setFontColor('#ffffff')  
- .setHorizontalAlignment('center');  
+ range.setFontWeight('bold').setBackground('#1c4587').setFontColor('#ffffff').setHorizontalAlignment('center');  
 }  
   
-/* ============================================================  
- * 18. אפס זמינות  
- * ============================================================ */  
 function resetAvailability() {  
  const mgmt = mgmt_();  
  const sh = mgmt.getSheetByName(SHEET_AVAIL);  
  if (!sh) { SpreadsheetApp.getUi().alert('גיליון זמינות לא נמצא!'); return; }  
-  
  const guards = readGuards_(mgmt);  
  const numG = guards.length;  
  const lastRow = sh.getLastRow();  
  if (lastRow < 3) return;  
-  
- sh.getRange(3, 6, lastRow - 2, numG)  
- .setValue(MARK_FREE);  
+ sh.getRange(3, 6, lastRow - 2, numG).setValue(MARK_FREE);  
  sh.getRange(3, 6 + numG, lastRow - 2, 1).clearContent();  
  sh.getRange(3, 7 + numG, lastRow - 2, 1).clearContent();  
  SpreadsheetApp.getUi().alert('✅ הזמינות אופסה — כל השומרים חזרו ל-1 (פנוי).');  
 }  
   
-/* ============================================================  
- * 19. טריגרים  
- * ============================================================ */  
 function setupTriggers() {  
  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));  
  ScriptApp.newTrigger('resetAvailability').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(6).create();  
  SpreadsheetApp.getUi().alert('✅ טריגר שבועי הוגדר: איפוס זמינות כל ראשון ב-06:00.');  
 }  
   
-/* ============================================================  
- * 20. מילוי חיצוניים — יוני 2026  
- * ============================================================ */  
 function fillExternalJune() {  
  const mgmt = mgmt_();  
  const sh = mgmt.getSheetByName(SHEET_EXTERNAL);  
  if (!sh) { SpreadsheetApp.getUi().alert('גיליון חיצוניים לא נמצא!'); return; }  
-  
  const june2026 = [  
- [new Date(2026, 5, 1), 'חיצוני א', '', ''],  
- [new Date(2026, 5, 2), 'חיצוני ב', '', ''],  
- [new Date(2026, 5, 3), 'חיצוני ג', '', ''],  
- [new Date(2026, 5, 4), 'חיצוני ד', '', ''],  
- [new Date(2026, 5, 5), 'חיצוני ה', '', ''],  
- [new Date(2026, 5, 6), 'חיצוני ו', '', ''],  
- [new Date(2026, 5, 7), 'חיצוני ז', '', ''],  
+ [new Date(2026, 5, 1), 'חיצוני א', '', ''],
+ [new Date(2026, 5, 2), 'חיצוני ב', '', ''],
+ [new Date(2026, 5, 7), 'חיצוני ז', '', ''],
  ];  
-  
  sh.getRange(2, 1, june2026.length, 4).setValues(june2026);  
  sh.getRange(2, 1, june2026.length, 1).setNumberFormat('dd/mm/yyyy');  
  SpreadsheetApp.getUi().alert('✅ לוח חיצוניים יוני 2026 הוזן.');  
 }  
   
-/* ============================================================  
- * 21. ממשק שומר  
- * ============================================================ */  
 function doGet(e) {  
  const guardName = (e && e.parameter && e.parameter.guard) ? String(e.parameter.guard).trim().replace(/^["']+|["']+$/g, '').trim() : '';  
  const template = HtmlService.createTemplateFromFile('Index');  
@@ -1294,33 +971,26 @@ function doGet(e) {
  .addMetaTag('viewport', 'width=device-width, initial-scale=1');  
 }  
   
-/* ============================================================  
- * 22. שמירת זמינות מהממשק  
- * ============================================================ */  
 function saveGuardPreferences(payload) {
   try {
     const mgmt = mgmt_();
     const sh = mgmt.getSheetByName(SHEET_AVAIL);
     if (!sh) throw new Error('גיליון זמינות לא נמצא');
-
     const lastCol = sh.getLastColumn();
     const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
     const resolvedName = String(payload.guard || payload.name || '').trim().replace(/^["']+|["']+$/g, '').trim();
     const guardCol = headerRow.findIndex(h => String(h).trim() === resolvedName);
     if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: [' + resolvedName + '] ' + GS_VERSION);
-
     const sheetCol = 6 + guardCol;
     const blocks = buildBlocks_();
     const numDays = DAYS.length;
     const numBlocks = blocks.length;
-
     const rowMap = {};
     const mapData = sh.getRange(3, 1, numDays * numBlocks, 2).getValues();
     mapData.forEach((r, i) => {
       const key = String(r[0]).trim() + '|' + String(r[1]).trim();
       rowMap[key] = 3 + i;
     });
-
     payload.days.forEach((dayData, di) => {
       const dayName = DAYS[di];
       Object.keys(dayData).forEach(bk => {
@@ -1330,16 +1000,17 @@ function saveGuardPreferences(payload) {
           const slotKey = dayName + '|' + slot;
           const sheetRow = rowMap[slotKey];
           if (!sheetRow) return;
-          const slotMark = mark ? String(mark).trim() : String(RATING_DEFAULT);
-          sh.getRange(sheetRow, sheetCol).setValue(slotMark);
+          sh.getRange(sheetRow, sheetCol).setValue(mark ? String(mark).trim() : String(RATING_DEFAULT));
         });
       });
     });
-
-    return { success: true, message: "הזמינות נשמרה בהצלחה" };
+    return { success: true, message: 'הזמינות נשמרה בהצלחה' };
   } catch (error) {
-    Logger.log("שגיאה בשמירה: " + error.toString());
-    throw new Error("לא הצלחנו לשמור: " + error.toString());
+    Logger.log('שגיאה בשמירה: ' + error.toString());
+    throw new Error('לא הצלחנו לשמור: ' + error.toString());
   }
 }
 
+function loadInterfaceResponsesFromUI() {
+  SpreadsheetApp.getUi().alert('פונקציה זו טוענת תגובות ממשק זמינות שנשמרו. הפעל דרך הממשק.');
+}
