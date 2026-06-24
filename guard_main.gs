@@ -58,7 +58,10 @@ function isBlocked_(mark) {
  return String(mark).trim().toUpperCase() === MARK_BLOCK;  
 }  
   
-/* ============================================================  
+// ══════════════════════════════════════════════════════════
+// § A · UTILITIES   buildBlocks_ · ratingToCost_ · helpers
+// ══════════════════════════════════════════════════════════
+/* ============================================================
  * 1. בלוקי זמן  
  * ============================================================ */  
 function buildBlocks_() {
@@ -115,7 +118,10 @@ function blockWeight_(dayName, block, weights, cfg, marksForBlock) {
  return weights['יום'];  
 }  
   
-/* ============================================================  
+// ══════════════════════════════════════════════════════════
+// § B · ENTRY POINTS   onOpen · setupV2 · createFiles · menu actions
+// ══════════════════════════════════════════════════════════
+/* ============================================================
  * 2. תפריט  
  * ============================================================ */  
 function onOpen() {  
@@ -474,6 +480,9 @@ function updateTrafficLights() {
  sh.getRange(2, 6, 1, numG).setValues([lights]);  
 }  
   
+// ══════════════════════════════════════════════════════════
+// § C · CORE SCHEDULING   runScheduler → buildPlan_ → chooseBest_ → backtrack_
+// ══════════════════════════════════════════════════════════
 /* ============================================================
  * 9. ▶️ הרץ שיבוץ
  * ============================================================ */
@@ -672,6 +681,9 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emerge
  return { rows, decisions, st, hardCap, maxShift };  
 }  
   
+// ══════════════════════════════════════════════════════════
+// § D · WRITERS   writeScheduleResult_ → writeSchedule_ / buildManagerView_ / writeHistory_ / publishSchedule_
+// ══════════════════════════════════════════════════════════
 function writeScheduleResult_(mgmt, guards, plan) {  
  const rows = plan.rows, decisions = plan.decisions, st = plan.st, hardCap = plan.hardCap, maxShift = plan.maxShift;  
   
@@ -999,7 +1011,10 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  return candidates[0].g;  
 }  
   
-/* ============================================================  
+// ══════════════════════════════════════════════════════════
+// § E · DATA READERS   readAvailabilityRows_ · initState_ · readSettings_
+// ══════════════════════════════════════════════════════════
+/* ============================================================
  * 11. קריאת זמינות  
  * ============================================================ */  
 function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
