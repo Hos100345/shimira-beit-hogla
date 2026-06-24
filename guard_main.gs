@@ -255,7 +255,50 @@ function createAvailabilityFile() {
   SpreadsheetApp.getUi().alert('✅ לשונית הזמינות נוצרה/עודכנה עבור ' + guards.length + ' שומרים!');
 }
   
+function readExistingAvailabilityMarks_(ss, guards) {
+  const result = {};
+  const sh = ss.getSheetByName(SHEET_AVAIL);
+  if (!sh || sh.getLastRow() < 3) return result;
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const data = sh.getRange(3, 1, sh.getLastRow() - 2, sh.getLastColumn()).getValues();
+  guards.forEach(guardName => {
+    const colIdx = header.findIndex(h => String(h).trim() === String(guardName).trim());
+    if (colIdx < 0) return;
+    result[guardName] = {};
+    data.forEach(row => {
+      const day = String(row[0]).trim();
+      const label = String(row[1]).trim();
+      if (day && label && row[colIdx] !== '' && row[colIdx] !== undefined)
+        result[guardName][day + '|' + label] = row[colIdx];
+    });
+  });
+  return result;
+}
+
+function readExistingRowData_(ss) {
+  const result = {};
+  const sh = ss.getSheetByName(SHEET_AVAIL);
+  if (!sh || sh.getLastRow() < 3) return result;
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const manualColIdx = header.findIndex(h => String(h).includes('שיבוץ ידני'));
+  const data = sh.getRange(3, 1, sh.getLastRow() - 2, sh.getLastColumn()).getValues();
+  data.forEach(row => {
+    const day = String(row[0]).trim();
+    const label = String(row[1]).trim();
+    if (!day || !label) return;
+    result[day + '|' + label] = {
+      status: String(row[3]).trim(),
+      positions: row[4] !== '' && row[4] !== undefined ? Number(row[4]) : undefined,
+      manual: manualColIdx >= 0 ? String(row[manualColIdx]).trim() : '',
+    };
+  });
+  return result;
+}
+
 function rebuildAvailabilityIn_(ss, guards) {
+ const savedMarks = readExistingAvailabilityMarks_(ss, guards);
+ const savedRowData = readExistingRowData_(ss);
+
  const sh = getCleanSheet_(ss, SHEET_AVAIL);
  sh.setRightToLeft(true);
  const blocks = buildBlocks_();
@@ -272,11 +315,17 @@ function rebuildAvailabilityIn_(ss, guards) {
 
  const data = [];
  DAYS.forEach(day => blocks.forEach(b => {
-   const status = b.external ? 'חיצוני בלבד' : 'פעיל';
-   const positions = b.external ? 0 : 1;
+   const key = day + '|' + b.label;
+   const existingRow = savedRowData[key] || {};
+   const status = existingRow.status || (b.external ? 'חיצוני בלבד' : 'פעיל');
+   const positions = existingRow.positions !== undefined ? existingRow.positions : (b.external ? 0 : 1);
    const row = [day, b.label, b.hours, status, positions];
-   guards.forEach(() => row.push(MARK_FREE));
-   row.push('');
+   guards.forEach(guardName => {
+     const mark = (savedMarks[guardName] && savedMarks[guardName][key] !== undefined)
+       ? savedMarks[guardName][key] : MARK_FREE;
+     row.push(mark);
+   });
+   row.push(existingRow.manual || '');
    row.push('');
    data.push(row);
  }));
@@ -1064,7 +1113,7 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
     const statusExternal = v[3] === 'חיצוני בלבד';
     const positions = Number(v[4]) || 0;
     const marks = guards.map((_, g) => v[5 + g]);
-    const manual = guards[v[5 + numGuards]] !== undefined ? v[5 + numGuards] : '';
+    const manual = v[5 + numGuards] ? String(v[5 + numGuards]).trim() : '';
     const manualIdx = manual ? guards.indexOf(String(manual).trim()) : -1;
 
     const extMatch = extRows.find(e => e.day === day && e.blockLabel === label);
