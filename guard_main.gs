@@ -581,10 +581,10 @@ function replanSchedule() {
  const cfg = readSettings_(mgmt);  
  const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
   
- const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, true);  
- writeScheduleResult_(mgmt, guards, plan);  
-}  
-  
+ const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false);
+ writeScheduleResult_(mgmt, guards, plan);
+}
+
 function extendAndReplan() {  
  const mgmt = mgmt_();  
  const guards = readGuards_(mgmt);  
