@@ -374,9 +374,9 @@ function createExternalFile() {
  const sh = extSs.insertSheet(SHEET_EXTERNAL);  
  buildExternalSheet_(sh);  
  }  
- SpreadsheetApp.getUi().alert('✅ הקובץ כבר קיים: ' + extSs.getUrl());  
- return;  
- } catch(e) {}  
+ SpreadsheetApp.getUi().alert('✅ הקובץ כבר קיים: ' + extSs.getUrl());
+ return;
+ } catch(e) { Logger.log('createExternalFile: ' + e); }
  }  
   
  const newSs = SpreadsheetApp.create('שומרים חיצוניים — בית חוגלה');  
@@ -513,7 +513,11 @@ function runScheduler() {
   const minPerGuard = guards.length > 0 ? Math.ceil(totalInternal / guards.length) : 24;
   let hardCap = Math.max(settingsCap, minPerGuard + 2);
 
-  let plan = buildPlan_(mgmt, guards, cfg, hardCap, null);
+  // קרא זמינות פעם אחת — עוברת לכל buildPlan_ כדי לחסוך 17 קריאות Sheets
+  const availBlocks = buildBlocks_();
+  const availRows = readAvailabilityRows_(mgmt, guards, cfg, availBlocks);
+
+  let plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows);
   let emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
 
   // שלב א׳ — הגדל מכסה (עד +12 שעות)
@@ -521,34 +525,37 @@ function runScheduler() {
   while (emptyCount > 0 && capAdded < 12) {
     hardCap++;
     capAdded++;
-    plan = buildPlan_(mgmt, guards, cfg, hardCap, null);
+    plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows);
     emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
   }
 
   // שלב ב׳+ג׳ — הפחת זמן מנוחה שלב-שלב עד מינימום 2 שעות
   let restReduced = 0;
   const origRest = Number(cfg.MIN_REST_TIME) || 4;
+  let bestCfg = cfg;
   while (emptyCount > 0 && origRest - restReduced > 2) {
     restReduced++;
     const relaxedCfg = Object.assign({}, cfg, { MIN_REST_TIME: origRest - restReduced });
-    const rPlan = buildPlan_(mgmt, guards, relaxedCfg, hardCap, null);
+    const rPlan = buildPlan_(mgmt, guards, relaxedCfg, hardCap, null, null, false, availRows);
     const rEmpty = rPlan.decisions.filter(d => d.mode === 'ריק').length;
-    if (rEmpty < emptyCount) { plan = rPlan; emptyCount = rEmpty; }
+    if (rEmpty < emptyCount) { plan = rPlan; emptyCount = rEmpty; bestCfg = relaxedCfg; }
   }
   const restRelaxed = restReduced > 0;
 
   // שלב ד׳ — הארך משמרות מקסימום ב-+2 שעות
   let shiftExtended = false;
+  let bestMaxShift = null;
   if (emptyCount > 0) {
-    const longShiftPlan = buildPlan_(mgmt, guards, cfg, hardCap, (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2);
+    const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
+    const longShiftPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, extShift, null, false, availRows);
     const lsEmpty = longShiftPlan.decisions.filter(d => d.mode === 'ריק').length;
-    if (lsEmpty < emptyCount) { plan = longShiftPlan; emptyCount = lsEmpty; shiftExtended = true; }
+    if (lsEmpty < emptyCount) { plan = longShiftPlan; emptyCount = lsEmpty; shiftExtended = true; bestMaxShift = extShift; }
   }
 
-  // שלב ה׳ — חירום: מנסה לשבץ כל שומר שאינו X, ללא כל הגבלת שעות/מנוחה
+  // שלב ה׳ — חירום עם ה-cfg הכי מרופה שנמצאה בשלבים הקודמים
   let emergencyUsed = false;
   if (emptyCount > 0) {
-    const emergPlan = buildPlan_(mgmt, guards, cfg, hardCap, null, false, true);
+    const emergPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, bestMaxShift, false, true, availRows);
     const eEmpty = emergPlan.decisions.filter(d => d.mode === 'ריק').length;
     if (eEmpty < emptyCount) { plan = emergPlan; emptyCount = eEmpty; emergencyUsed = true; }
   }
@@ -594,9 +601,9 @@ function extendAndReplan() {
 /* ============================================================  
  * 10. בניית תוכנית שיבוץ  
  * ============================================================ */  
-function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emergencyMode) {  
- const blocks = buildBlocks_();  
- const rows = readAvailabilityRows_(mgmt, guards, cfg, blocks);  
+function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emergencyMode, preloadedRows) {
+ const blocks = buildBlocks_();
+ const rows = preloadedRows || readAvailabilityRows_(mgmt, guards, cfg, blocks);  
  const st = initState_(guards, mgmt, cfg);  
  const maxShift = maxShiftOverride || Number(cfg.MAX_SHIFT_LENGTH) || 4;  
   
@@ -739,10 +746,14 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
   });
 
   const lastRow = sh.getLastRow();
-  if (lastRow >= 3) sh.getRange(3, syncCol, lastRow - 2, 1).clearContent();
+  if (lastRow < 3) return;
+  const numSyncRows = lastRow - 2;
+  const colVals = new Array(numSyncRows).fill(null).map(() => ['']);
   Object.entries(byRow).forEach(([sheetRow, names]) => {
-    sh.getRange(Number(sheetRow), syncCol).setValue(names.join(' / '));
+    const ri = Number(sheetRow) - 3;
+    if (ri >= 0 && ri < numSyncRows) colVals[ri] = [names.join(' / ')];
   });
+  sh.getRange(3, syncCol, numSyncRows, 1).setValues(colVals);
 }
 
 /* ============================================================
@@ -1067,7 +1078,7 @@ function readExternalRows_(mgmt, cfg) {
  let extSh = null;  
  const extId = cfg.EXTERNAL_SPREADSHEET_ID;  
  if (extId) {  
- try { extSh = SpreadsheetApp.openById(extId).getSheetByName(SHEET_EXTERNAL); } catch(e) {}  
+ try { extSh = SpreadsheetApp.openById(extId).getSheetByName(SHEET_EXTERNAL); } catch(e) { Logger.log('readExternalRows_: ' + e); }  
  }  
  if (!extSh) extSh = mgmt.getSheetByName(SHEET_EXTERNAL);  
  if (!extSh) return extRows;  
@@ -1136,7 +1147,7 @@ function publishSchedule_(mgmt) {
  if (!pubId) return null;  
   
  let pubSs;  
- try { pubSs = SpreadsheetApp.openById(pubId); } catch(e) { return null; }  
+ try { pubSs = SpreadsheetApp.openById(pubId); } catch(e) { Logger.log('publishSchedule_: ' + e); return null; }  
   
  const src = mgmt.getSheetByName(SHEET_SCHEDULE);  
  if (!src) return null;  
@@ -1239,10 +1250,8 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
 
  if (cells.length === 0) { row++; return; }
  sh.getRange(dayStart, 1, cells.length, 4).setValues(cells.map(c => [c[0], c[1], c[2], c[3]]));
- cells.forEach((c, ci) => {
-   sh.getRange(dayStart + ci, 2).setBackground(c[4]);
-   sh.getRange(dayStart + ci, 3).setBackground(c[5]);
- });
+ sh.getRange(dayStart, 2, cells.length, 1).setBackgrounds(cells.map(c => [c[4]]));
+ sh.getRange(dayStart, 3, cells.length, 1).setBackgrounds(cells.map(c => [c[5]]));
  row += cells.length;
  row++;  
  });  
