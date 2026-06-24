@@ -856,19 +856,20 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  const cost = ratingToCost_(mark) * r.weight;  
  const futureLoad = futureManualHours[g];  
   
- candidates.push({ g, priority, cost, hours: s.hours, futureLoad });  
- });  
-  
- if (candidates.length === 0) return -1;  
-  
- candidates.sort((a, b) => {  
- if (a.priority !== b.priority) return a.priority - b.priority;  
- if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;  
- if (Math.abs(a.futureLoad - b.futureLoad) > 0) return a.futureLoad - b.futureLoad;  
- if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;  
- if (jitter) return Math.random() - 0.5;  
- return 0;  
- });  
+ candidates.push({ g, priority, cost, hours: s.hours, futureLoad, isConsecutive });
+ });
+
+ if (candidates.length === 0) return -1;
+
+ candidates.sort((a, b) => {
+ if (a.priority !== b.priority) return a.priority - b.priority;
+ if (a.isConsecutive !== b.isConsecutive) return a.isConsecutive ? -1 : 1;
+ if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;
+ if (Math.abs(a.futureLoad - b.futureLoad) > 0) return a.futureLoad - b.futureLoad;
+ if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;
+ if (jitter) return Math.random() - 0.5;
+ return 0;
+ });
   
  return candidates[0].g;  
 }  
@@ -954,15 +955,16 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
  if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  const cost = ratingToCost_(mark) * r.weight;  
- candidates.push({ g, cost, hours: s.hours });  
- });  
- if (candidates.length === 0) return -1;  
- candidates.sort((a, b) => {  
- if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;  
- if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;  
- if (jitter) return Math.random() - 0.5;  
- return 0;  
- });  
+ candidates.push({ g, cost, hours: s.hours, isConsecutive });
+ });
+ if (candidates.length === 0) return -1;
+ candidates.sort((a, b) => {
+ if (a.isConsecutive !== b.isConsecutive) return a.isConsecutive ? -1 : 1;
+ if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;
+ if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;
+ if (jitter) return Math.random() - 0.5;
+ return 0;
+ });
  return candidates[0].g;  
 }  
   
