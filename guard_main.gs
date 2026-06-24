@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.6';
+const GS_VERSION = 'v2.7';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -142,6 +142,7 @@ function onOpen() {
  .addItem('🔄 אפס זמינות לשבוע חדש', 'resetAvailability')  
  .addItem('📥 עבד תגובות ממשק', 'loadInterfaceResponsesFromUI')
     .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
+ .addItem('⏱️ עדכן ממוצע שעות', 'fillGuardTargetAverages')
     .addToUi();  
 }  
   
@@ -209,9 +210,10 @@ function setupV2() {
  }  
  const gs = getCleanSheet_(ss, SHEET_GUARDS);  
  gs.setRightToLeft(true);  
- gs.getRange(1, 1).setValue('שם השומר');  
- gs.getRange(2, 1, names.length, 1).setValues(names);  
- styleHeader_(gs.getRange(1, 1, 1, 1));  
+ gs.getRange(1, 1, 1, 2).setValues([['שם השומר', 'מכסה שעות']]);
+ gs.getRange(2, 1, names.length, 1).setValues(names);
+ styleHeader_(gs.getRange(1, 1, 1, 2));
+ gs.setColumnWidth(2, 120);  
   
  const ex = getCleanSheet_(ss, SHEET_EXTERNAL);  
  ex.setRightToLeft(true);  
@@ -522,11 +524,14 @@ function runScheduler() {
   const minPerGuard = guards.length > 0 ? Math.ceil(totalInternal / guards.length) : 24;
   let hardCap = Math.max(settingsCap, minPerGuard + 2);
 
+  // מכסה אישית לכל שומר (עמודה B ב-SHEET_GUARDS); ריק = ממוצע אוטומטי
+  const targets = readGuardTargets_(mgmt, guards, totalInternal);
+
   // קרא זמינות פעם אחת — עוברת לכל buildPlan_ כדי לחסוך 17 קריאות Sheets
   const availBlocks = buildBlocks_();
   const availRows = readAvailabilityRows_(mgmt, guards, cfg, availBlocks);
 
-  let plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows);
+  let plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows, targets);
   let emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
 
   // שלב א׳ — הגדל מכסה (עד +12 שעות)
@@ -534,7 +539,7 @@ function runScheduler() {
   while (emptyCount > 0 && capAdded < 12) {
     hardCap++;
     capAdded++;
-    plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows);
+    plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows, targets);
     emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
   }
 
@@ -545,7 +550,7 @@ function runScheduler() {
   while (emptyCount > 0 && origRest - restReduced > 2) {
     restReduced++;
     const relaxedCfg = Object.assign({}, cfg, { MIN_REST_TIME: origRest - restReduced });
-    const rPlan = buildPlan_(mgmt, guards, relaxedCfg, hardCap, null, null, false, availRows);
+    const rPlan = buildPlan_(mgmt, guards, relaxedCfg, hardCap, null, null, false, availRows, targets);
     const rEmpty = rPlan.decisions.filter(d => d.mode === 'ריק').length;
     if (rEmpty < emptyCount) { plan = rPlan; emptyCount = rEmpty; bestCfg = relaxedCfg; }
   }
@@ -556,7 +561,7 @@ function runScheduler() {
   let bestMaxShift = null;
   if (emptyCount > 0) {
     const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
-    const longShiftPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, extShift, null, false, availRows);
+    const longShiftPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, extShift, null, false, availRows, targets);
     const lsEmpty = longShiftPlan.decisions.filter(d => d.mode === 'ריק').length;
     if (lsEmpty < emptyCount) { plan = longShiftPlan; emptyCount = lsEmpty; shiftExtended = true; bestMaxShift = extShift; }
   }
@@ -564,7 +569,7 @@ function runScheduler() {
   // שלב ה׳ — חירום עם ה-cfg הכי מרופה שנמצאה בשלבים הקודמים
   let emergencyUsed = false;
   if (emptyCount > 0) {
-    const emergPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, bestMaxShift, false, true, availRows);
+    const emergPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, bestMaxShift, false, true, availRows, targets);
     const eEmpty = emergPlan.decisions.filter(d => d.mode === 'ריק').length;
     if (eEmpty < emptyCount) { plan = emergPlan; emptyCount = eEmpty; emergencyUsed = true; }
   }
@@ -610,7 +615,7 @@ function extendAndReplan() {
 /* ============================================================  
  * 10. בניית תוכנית שיבוץ  
  * ============================================================ */  
-function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emergencyMode, preloadedRows) {
+function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emergencyMode, preloadedRows, targets) {
  const blocks = buildBlocks_();
  const rows = preloadedRows || readAvailabilityRows_(mgmt, guards, cfg, blocks);  
  const st = initState_(guards, mgmt, cfg);  
@@ -654,9 +659,9 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emerge
  const sameSlotExcluded = new Set(  
  decisions.filter(d => rows[d.rowIdx].sheetRow === r.sheetRow && d.guard >= 0).map(d => d.guard)  
  );  
- const g = chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, sameSlotExcluded, emergencyMode);
+ const g = chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, sameSlotExcluded, emergencyMode, targets);
  if (g === -1) {
- const bt = backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode);  
+ const bt = backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode, targets);  
  if (bt !== null) { i = bt; continue; }  
  decisions.push({ rowIdx: i, guard: -1, mode: 'ריק' });  
  i++;  
@@ -864,7 +869,7 @@ function applyAssign_(st, g, r) {
  s.lastNight = r.night || (s.lastNight && s.run > r.hours);  
 }  
   
-function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode) {
+function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode, targets) {
  const candidates = [];
  const excl = excluded || new Set();
 
@@ -876,7 +881,8 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
 
  const isConsecutive = (s.lastEnd === r.startAbs);
  if (!emergencyMode) {
- if (s.hours >= hardCap) return;
+ const guardCap = (targets && targets[g] > 0) ? targets[g] : hardCap;
+ if (s.hours >= guardCap) return;
  const curRun = isConsecutive ? s.run : 0;
  if (curRun >= maxShift) return;
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
@@ -897,7 +903,8 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  const cost = ratingToCost_(mark) * r.weight * (emergencyMode ? 100 : 1);
  const futureLoad = futureManualHours[g];
 
- candidates.push({ g, priority, cost, hours: s.hours, futureLoad, isConsecutive });
+ const guardTarget = (targets && targets[g] > 0) ? targets[g] : hardCap;
+ candidates.push({ g, priority, cost, hours: s.hours, target: guardTarget, futureLoad, isConsecutive });
  });
 
  if (candidates.length === 0) return -1;
@@ -905,7 +912,9 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  candidates.sort((a, b) => {
  if (a.priority !== b.priority) return a.priority - b.priority;
  if (a.isConsecutive !== b.isConsecutive) return a.isConsecutive ? -1 : 1;
- if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;
+ const aRemain = a.target - a.hours;
+ const bRemain = b.target - b.hours;
+ if (Math.abs(aRemain - bRemain) > 0.5) return bRemain - aRemain; // מי שרחוק יותר ממכסתו — עדיפות
  if (Math.abs(a.futureLoad - b.futureLoad) > 0) return a.futureLoad - b.futureLoad;
  if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;
  if (jitter) return Math.random() - 0.5;
@@ -934,7 +943,7 @@ function getPartner_(guards, g, r, st, cfg) {
  return best;  
 }  
   
-function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode) {  
+function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode, targets) {  
  const maxBack = Number(cfg.MAX_BACKTRACK_HOURS) || 3;  
  const failRow = rows[failIdx];  
  const backLimit = failRow.startAbs - maxBack;  
@@ -959,7 +968,7 @@ function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift
  }  
   
  const excluded = new Set([d.guard]);
- const altG = chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode);  
+ const altG = chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode, targets);  
   
  if (altG === -1 || altG === d.guard) {  
  Object.assign(st, savedSt);  
@@ -982,7 +991,7 @@ function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift
  return null;  
 }  
   
-function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode) {
+function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode, targets) {
  const candidates = [];
  guards.forEach((name, g) => {
  if (excluded.has(g)) return;
@@ -991,24 +1000,28 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  if (isBlocked_(mark)) return;
  const isConsecutive = (s.lastEnd === r.startAbs);
  if (!emergencyMode) {
- if (s.hours >= hardCap) return;
+ const guardCap = (targets && targets[g] > 0) ? targets[g] : hardCap;
+ if (s.hours >= guardCap) return;
  const curRun = isConsecutive ? s.run : 0;
  if (curRun >= maxShift) return;
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
  if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  }
  const cost = ratingToCost_(mark) * r.weight * (emergencyMode ? 100 : 1);
- candidates.push({ g, cost, hours: s.hours, isConsecutive });
+ const guardTarget = (targets && targets[g] > 0) ? targets[g] : hardCap;
+ candidates.push({ g, cost, hours: s.hours, target: guardTarget, isConsecutive });
  });
  if (candidates.length === 0) return -1;
  candidates.sort((a, b) => {
  if (a.isConsecutive !== b.isConsecutive) return a.isConsecutive ? -1 : 1;
- if (Math.abs(a.hours - b.hours) > 0.5) return a.hours - b.hours;
+ const aRemain = a.target - a.hours;
+ const bRemain = b.target - b.hours;
+ if (Math.abs(aRemain - bRemain) > 0.5) return bRemain - aRemain;
  if (Math.abs(a.cost - b.cost) > 0.01) return a.cost - b.cost;
  if (jitter) return Math.random() - 0.5;
  return 0;
  });
- return candidates[0].g;  
+ return candidates[0].g;
 }  
   
 // ══════════════════════════════════════════════════════════
@@ -1361,13 +1374,50 @@ function mgmt_() {
  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();  
 }  
   
-function readGuards_(ss) {  
- const sh = ss.getSheetByName(SHEET_GUARDS);  
- if (!sh || sh.getLastRow() < 2) return [];  
- return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues()  
- .map(r => String(r[0]).trim()).filter(n => n);  
-}  
-  
+function readGuards_(ss) {
+ const sh = ss.getSheetByName(SHEET_GUARDS);
+ if (!sh || sh.getLastRow() < 2) return [];
+ return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues()
+ .map(r => String(r[0]).trim()).filter(n => n);
+}
+
+// קורא עמודה B מ-SHEET_GUARDS (מכסה שעות לכל שומר).
+// תא ריק / 0 → totalHours / numGuards (ממוצע אוטומטי).
+function readGuardTargets_(ss, guards, totalHours) {
+ const avg = guards.length > 0 ? totalHours / guards.length : 0;
+ const sh = ss.getSheetByName(SHEET_GUARDS);
+ if (!sh || sh.getLastRow() < 2) return guards.map(() => avg);
+ const vals = sh.getRange(2, 2, guards.length, 1).getValues();
+ return guards.map((_, i) => {
+ const v = Number(vals[i] ? vals[i][0] : 0);
+ return v > 0 ? v : avg;
+ });
+}
+
+// כתוב ממוצע שעות לתאים ריקים בעמודה B של SHEET_GUARDS + הצג סיכום.
+function fillGuardTargetAverages() {
+ const mgmt = mgmt_();
+ const guards = readGuards_(mgmt);
+ if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }
+ const cfg = readSettings_(mgmt);
+ const totalHours = calcRequiredHours_(mgmt, guards, cfg);
+ const avg = Math.round(totalHours / guards.length * 10) / 10;
+
+ const sh = mgmt.getSheetByName(SHEET_GUARDS);
+ const vals = sh.getRange(2, 2, guards.length, 1).getValues();
+ let filled = 0;
+ vals.forEach((row, i) => { if (!Number(row[0])) { vals[i][0] = avg; filled++; } });
+ sh.getRange(2, 2, guards.length, 1).setValues(vals);
+
+ const summaryRow = guards.length + 3;
+ sh.getRange(summaryRow, 1, 1, 2).setValues([['📊 סה"כ שבועי', totalHours + ' שעות | ממוצע: ' + avg]]);
+
+ SpreadsheetApp.getUi().alert(
+ 'סה"כ שעות לשיבוץ: ' + totalHours +
+ '\nממוצע לשומר: ' + avg +
+ '\nמולאו ' + filled + ' תאים ריקים.\n\nערוך את עמודה B ידנית כדי לשנות מכסה לשומר ספציפי.');
+}
+
 function getCleanSheet_(ss, name) {  
  let sh = ss.getSheetByName(name);  
  if (sh) sh.clearContents().clearFormats().clearConditionalFormatRules();  
