@@ -1188,46 +1188,66 @@ function writeSchedule_(ss, rows, decisions, guards, st) {
  const dayStart = row;  
  const dayDecisions = decisions.filter(d => rows[d.rowIdx].dayIndex === di);  
   
- const cells = [];  
- const labelCount = {};  
- dayDecisions.forEach(d => {  
- const lbl = rows[d.rowIdx].label;  
- labelCount[lbl] = (labelCount[lbl] || 0) + 1;  
- });  
- const labelSeen = {};  
- dayDecisions.forEach(d => {  
- const r = rows[d.rowIdx];  
- labelSeen[r.label] = (labelSeen[r.label] || 0) + 1;  
- const isSecond = labelCount[r.label] > 1 && labelSeen[r.label] > 1;  
- const displayLabel = isSecond ? '↳ עמ׳ ב׳' : r.label;  
- let posA, posB, status, cA = '#ffffff', cB = '#ffffff';  
-  
- if (d.mode === 'חיצוני') {  
- posA = '—'; posB = d.name; status = '👥 חיצוני'; cB = '#d9d9d9';  
- } else if (d.mode === 'שותף') {  
- posA = '—'; posB = d.name + ' (סיור)'; status = '🚶 סיור/שותף'; cB = '#d0e8d0';  
- } else if (d.guard === -1) {  
- posA = '🚨 ריק'; posB = d.partner || '—'; status = '🚨 לא מאויש!'; cA = '#ff0000';  
- } else {  
- posA = guards[d.guard];  
- if (r.night && !r.external) posB = d.partner || '—';  
- else if (r.external) posB = '⚠️ אין חיצוני';  
- else posB = '—';  
- if (d.mode === 'חירום') { status = '⚠️ חירום'; cA = '#f9cb9c'; }  
- else if (d.mode === 'ידני') { status = '🔒 ידני'; cA = '#d9d2e9'; }  
- else { status = '✅ תקין'; }  
- }  
-  
- cells.push([displayLabel, posA, posB, status, cA, cB]);  
- });  
-  
- if (cells.length === 0) { row++; return; }  
- sh.getRange(dayStart, 1, cells.length, 4).setValues(cells.map(c => [c[0], c[1], c[2], c[3]]));  
- cells.forEach((c, ci) => {  
- sh.getRange(dayStart + ci, 2).setBackground(c[4]);  
- sh.getRange(dayStart + ci, 3).setBackground(c[5]);  
- });  
- row += cells.length;  
+ const cells = [];
+ const labelCount = {};
+ dayDecisions.forEach(d => {
+   const lbl = rows[d.rowIdx].label;
+   labelCount[lbl] = (labelCount[lbl] || 0) + 1;
+ });
+
+ const labelSeen = {};
+ let idx = 0;
+ while (idx < dayDecisions.length) {
+   const d = dayDecisions[idx];
+   const r = rows[d.rowIdx];
+   labelSeen[r.label] = (labelSeen[r.label] || 0) + 1;
+   const isSecond = labelCount[r.label] > 1 && labelSeen[r.label] > 1;
+
+   // Merge consecutive same-guard single-position assignments into one row
+   let displayLabel = isSecond ? '↳ עמ׳ ב׳' : r.label;
+   let skipTo = idx + 1;
+   if (!isSecond && d.guard >= 0 && d.mode !== 'חיצוני' && d.mode !== 'שותף') {
+     let endLabel = r.label.slice(6);
+     let endAbs = r.startAbs + r.hours;
+     let j = idx + 1;
+     while (j < dayDecisions.length) {
+       const d2 = dayDecisions[j], r2 = rows[d2.rowIdx];
+       if (labelCount[r2.label] > 1 || d2.guard !== d.guard || d2.mode !== d.mode || r2.startAbs !== endAbs) break;
+       endLabel = r2.label.slice(6);
+       endAbs = r2.startAbs + r2.hours;
+       j++;
+     }
+     if (j > idx + 1) displayLabel = r.label.slice(0, 5) + '-' + endLabel;
+     skipTo = j;
+   }
+
+   let posA, posB, status, cA = '#ffffff', cB = '#ffffff';
+   if (d.mode === 'חיצוני') {
+     posA = '—'; posB = d.name; status = '👥 חיצוני'; cB = '#d9d9d9';
+   } else if (d.mode === 'שותף') {
+     posA = '—'; posB = d.name + ' (סיור)'; status = '🚶 סיור/שותף'; cB = '#d0e8d0';
+   } else if (d.guard === -1) {
+     posA = '🚨 ריק'; posB = d.partner || '—'; status = '🚨 לא מאויש!'; cA = '#ff0000';
+   } else {
+     posA = guards[d.guard];
+     if (r.night && !r.external) posB = d.partner || '—';
+     else if (r.external) posB = '⚠️ אין חיצוני';
+     else posB = '—';
+     if (d.mode === 'חירום') { status = '⚠️ חירום'; cA = '#f9cb9c'; }
+     else if (d.mode === 'ידני') { status = '🔒 ידני'; cA = '#d9d2e9'; }
+     else { status = '✅ תקין'; }
+   }
+   cells.push([displayLabel, posA, posB, status, cA, cB]);
+   idx = skipTo;
+ }
+
+ if (cells.length === 0) { row++; return; }
+ sh.getRange(dayStart, 1, cells.length, 4).setValues(cells.map(c => [c[0], c[1], c[2], c[3]]));
+ cells.forEach((c, ci) => {
+   sh.getRange(dayStart + ci, 2).setBackground(c[4]);
+   sh.getRange(dayStart + ci, 3).setBackground(c[5]);
+ });
+ row += cells.length;
  row++;  
  });  
   
