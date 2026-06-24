@@ -816,11 +816,7 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
   if (dataRows.length === 0) return;
   sh.getRange(2, 1, dataRows.length, 4 + numG).setValues(dataRows);
 
-  colorMatrix.forEach((colors, ri) => {
-    colors.forEach((color, ci) => {
-      if (color !== '#ffffff') sh.getRange(2 + ri, 1 + ci).setBackground(color);
-    });
-  });
+  sh.getRange(2, 1, colorMatrix.length, 4 + numG).setBackgrounds(colorMatrix);
 
   sh.getRange(1, 4 + numG + 2).setValue('מקרא: 🟢 שובץ בנוחות | 🟡 שובץ בקושי | 🟠 קושי גדול | 🔴 שובץ למרות חסימה | 🟦 לא שובץ')
     .setFontColor('#555555').setFontSize(9).setFontStyle('italic');
