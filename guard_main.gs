@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.4';
+const GS_VERSION = 'v2.5';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -837,13 +837,13 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  const mark = r.marks[g];  
  if (isBlocked_(mark)) return;  
   
- if (s.hours >= hardCap) return;  
- const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;  
- if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
-  
- const curRun = (s.lastEnd === r.startAbs) ? s.run : 0;  
- if (curRun >= maxShift) return;  
-  
+ if (s.hours >= hardCap) return;
+ const isConsecutive = (s.lastEnd === r.startAbs);
+ const curRun = isConsecutive ? s.run : 0;
+ if (curRun >= maxShift) return;
+ const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
+ if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
+
  const debtSensitivity = Number(cfg.DEBT_SENSITIVITY) || 2;  
  const adjustedGreen = (Number(cfg.GREEN_MAX_POINTS) || 20) - s.weekdayDebt * debtSensitivity;  
  const adjustedYellow = (Number(cfg.YELLOW_MAX_POINTS) || 40) - s.weekdayDebt * debtSensitivity;  
@@ -876,15 +876,16 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
 function getPartner_(guards, g, r, st, cfg) {  
  if (r.partnerName) return r.partnerName;  
   
- const rest = Number(cfg.MIN_REST_TIME) || 4;  
- let best = null, bestHours = Infinity;  
-  
- guards.forEach((name, pg) => {  
- if (pg === g) return;  
- const s = st[pg];  
- const mark = r.marks[pg];  
- if (isBlocked_(mark)) return;  
- if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
+ const rest = Number(cfg.MIN_REST_TIME) || 4;
+ let best = null, bestHours = Infinity;
+
+ guards.forEach((name, pg) => {
+ if (pg === g) return;
+ const s = st[pg];
+ const mark = r.marks[pg];
+ if (isBlocked_(mark)) return;
+ const isConsecutive = (s.lastEnd === r.startAbs);
+ if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
  if (s.hours < bestHours) { best = name; bestHours = s.hours; }  
  });  
   
@@ -946,11 +947,12 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  const s = st[g];  
  const mark = r.marks[g];  
  if (isBlocked_(mark)) return;  
- if (s.hours >= hardCap) return;  
- const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;  
- if (s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;  
- const curRun = (s.lastEnd === r.startAbs) ? s.run : 0;  
- if (curRun >= maxShift) return;  
+ if (s.hours >= hardCap) return;
+ const isConsecutive = (s.lastEnd === r.startAbs);
+ const curRun = isConsecutive ? s.run : 0;
+ if (curRun >= maxShift) return;
+ const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
+ if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  const cost = ratingToCost_(mark) * r.weight;  
  candidates.push({ g, cost, hours: s.hours });  
  });  
@@ -996,7 +998,7 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
     }
 
     const bStart = parseInt(label.slice(0, 2), 10);
-    const startAbs = absBase + bStart;
+    const startAbs = absBase + (bStart < 6 ? bStart + 24 : bStart);
 
     const statusExternal = v[3] === 'חיצוני בלבד';
     const positions = Number(v[4]) || 0;
