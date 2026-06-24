@@ -1503,11 +1503,10 @@ function saveGuardPreferences(payload) {
     const sh = mgmt.getSheetByName(SHEET_AVAIL);
     if (!sh) throw new Error('גיליון זמינות לא נמצא');
 
-    const lastCol = sh.getLastColumn();
-    const headerRow = sh.getRange(1, 6, 1, Math.max(1, lastCol - 5)).getValues()[0];
     const resolvedName = String(payload.guard || payload.name || '').trim().replace(/^["']+|["']+$/g, '').trim();
-    const guardCol = headerRow.findIndex(h => String(h).trim() === resolvedName);
-    if (guardCol < 0) throw new Error('שומר לא נמצא בגיליון: [' + resolvedName + '] ' + GS_VERSION);
+    const guards = readGuards_(mgmt);
+    const guardCol = guards.findIndex(name => name.trim() === resolvedName);
+    if (guardCol < 0) throw new Error('שומר לא נמצא ברשימה: [' + resolvedName + '] ' + GS_VERSION);
 
     const sheetCol = 6 + guardCol;
     const blocks = buildBlocks_();
