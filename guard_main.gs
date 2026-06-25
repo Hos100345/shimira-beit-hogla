@@ -165,9 +165,8 @@ function setupV2() {
  ['MAX_BACKTRACK_HOURS', 3, 'מספר השעות שהאלגוריתם חוזר אחורה כשנתקע במבוי סתום (ברירת מחדל: 3)'],
  ['📊 ניקוד ואיזון', '', ''],
  ['MAX_WEEKDAY_DEBT_HOURS', 2, 'סף הפרש שעות שבועי בין שומרים; מעל הסף — האלגוריתם מאזן (ברירת מחדל: 2)'],
- ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות חסימה הצבורות השומר נשאר ירוק (פנוי לשיבוץ)'],
- ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות = רמזור צהוב; מעל זה = אדום (עמוס — ישובץ רק בהכרח)'],
- ['QUESTION_COST_FACTOR', 0.5, 'עלות "?" ביחס ל-"✕" (0.5 = חצי נקודה, 1.0 = שווה ל-✕)'],
+ ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות X הצבורות השומר נשאר ירוק (פנוי לשיבוץ)'],
+ ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות X = רמזור צהוב; מעל זה = אדום (עמוס — ישובץ רק בהכרח)'],
  ['DEBT_SENSITIVITY', 2, 'כמה נקודות חוב מהשבוע הקודם מורידות את סף הרמזור של השומר'],
  ['📅 חלון שבת', '', ''],
  ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון שבת/חג (ברירת מחדל: שישי)'],
@@ -521,11 +520,10 @@ function updateTrafficLights() {
  const data = sh.getRange(3, 6, numDays * numB, numG).getValues();  
  const scores = new Array(numG).fill(0);  
   
- data.forEach(row => {  
- row.forEach((cell, g) => {  
- const m = String(cell).trim().toUpperCase();  
- if (m === MARK_BLOCK) scores[g] += 3;  
- else if (m === MARK_PREFER_NOT) scores[g] += 1;  
+ data.forEach(row => {
+ row.forEach((cell, g) => {
+ const m = String(cell).trim().toUpperCase();
+ if (m === MARK_BLOCK) scores[g] += 3;
  });  
  });  
   
@@ -998,14 +996,17 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
 
  const cost = ratingToCost_(mark) * r.weight * (emergencyMode ? 100 : 1);
  const futureLoad = futureManualHours[g];
+ const minShift = Number(cfg.MIN_SHIFT_LENGTH) || 2;
+ const belowMin = isConsecutive && curRun > 0 && curRun < minShift;
 
  const guardTarget = (targets && targets[g] > 0) ? targets[g] : hardCap;
- candidates.push({ g, priority, cost, hours: s.hours, target: guardTarget, futureLoad, isConsecutive });
+ candidates.push({ g, priority, cost, hours: s.hours, target: guardTarget, futureLoad, isConsecutive, belowMin });
  });
 
  if (candidates.length === 0) return -1;
 
  candidates.sort((a, b) => {
+ if (a.belowMin !== b.belowMin) return a.belowMin ? -1 : 1; // השלם משמרת מינימלית לפני החלפה
  if (a.priority !== b.priority) return a.priority - b.priority;
  if (a.isConsecutive !== b.isConsecutive) return a.isConsecutive ? -1 : 1;
  const aRemain = a.target - a.hours;
@@ -1106,10 +1107,13 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  }
  const cost = ratingToCost_(mark) * r.weight * (emergencyMode ? 100 : 1);
  const guardTarget = (targets && targets[g] > 0) ? targets[g] : hardCap;
- candidates.push({ g, cost, hours: s.hours, target: guardTarget, isConsecutive });
+ const minShift = Number(cfg.MIN_SHIFT_LENGTH) || 2;
+ const belowMin = isConsecutive && curRun > 0 && curRun < minShift;
+ candidates.push({ g, cost, hours: s.hours, target: guardTarget, isConsecutive, belowMin });
  });
  if (candidates.length === 0) return -1;
  candidates.sort((a, b) => {
+ if (a.belowMin !== b.belowMin) return a.belowMin ? -1 : 1;
  if (a.isConsecutive !== b.isConsecutive) return a.isConsecutive ? -1 : 1;
  const aRemain = a.target - a.hours;
  const bRemain = b.target - b.hours;
