@@ -766,7 +766,7 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emerge
  let mode = 'רגיל';  
  const s = st[g];  
  if (s.hours >= hardCap) mode = 'חריגת שעות';  
- else if (r.run > maxShift) mode = 'חירום';  
+ else if (s.run > maxShift) mode = 'חירום';  
   
  const partner = (r.night && !r.external) ? getPartner_(guards, g, r, st, cfg) : null;  
  decisions.push({ rowIdx: i, guard: g, mode, partner });  
@@ -975,11 +975,12 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  if (isBlocked_(mark)) return;
 
  const isConsecutive = (s.lastEnd === r.startAbs);
+ const curRun = isConsecutive ? s.run : 0;
+ const maxRunLimit = emergencyMode ? (maxShift || 4) * 2 : maxShift;
+ if (curRun >= maxRunLimit) return;
  if (!emergencyMode) {
  const guardCap = (targets && targets[g] > 0) ? targets[g] : hardCap;
  if (s.hours >= guardCap) return;
- const curRun = isConsecutive ? s.run : 0;
- if (curRun >= maxShift) return;
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
  if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  }
@@ -1094,11 +1095,12 @@ function chooseBestExcluding_(guards, r, st, hardCap, maxShift, futureManualHour
  const mark = r.marks[g];
  if (isBlocked_(mark)) return;
  const isConsecutive = (s.lastEnd === r.startAbs);
+ const curRun = isConsecutive ? s.run : 0;
+ const maxRunLimit = emergencyMode ? (maxShift || 4) * 2 : maxShift;
+ if (curRun >= maxRunLimit) return;
  if (!emergencyMode) {
  const guardCap = (targets && targets[g] > 0) ? targets[g] : hardCap;
  if (s.hours >= guardCap) return;
- const curRun = isConsecutive ? s.run : 0;
- if (curRun >= maxShift) return;
  const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
  if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  }
