@@ -318,12 +318,16 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.getRange(2, 1).setValue('🚦 רמזור ←');
  sh.getRange(2, 6, 1, numG).setValue('—').setHorizontalAlignment('center');
 
+ const VALID_STATUSES = ['פעיל', 'חיצוני בלבד'];
  const data = [];
  DAYS.forEach(day => blocks.forEach(b => {
    const key = day + '|' + b.label;
    const existingRow = savedRowData[key] || {};
-   const status = existingRow.status || (b.external ? 'חיצוני בלבד' : 'פעיל');
-   const positions = existingRow.positions !== undefined ? existingRow.positions : (b.external ? 0 : 1);
+   const status = VALID_STATUSES.includes(existingRow.status)
+     ? existingRow.status
+     : (b.external ? 'חיצוני בלבד' : 'פעיל');
+   const rawPos = existingRow.positions ?? (b.external ? 0 : 1);
+   const positions = [0, 1, 2].includes(rawPos) ? rawPos : (b.external ? 0 : 1);
    const row = [day, b.label, b.hours, status, positions];
    guards.forEach(guardName => {
      const mark = (savedMarks[guardName] && savedMarks[guardName][key] !== undefined)
@@ -334,7 +338,16 @@ function rebuildAvailabilityIn_(ss, guards) {
    row.push('');
    data.push(row);
  }));
- sh.getRange(3, 1, data.length, totalCols).setValues(data);
+ try {
+   sh.getRange(3, 1, data.length, totalCols).setValues(data);
+ } catch (e) {
+   SpreadsheetApp.getUi().alert(
+     'שגיאה בכתיבת נתונים: ' + e.message +
+     '\nשורות: ' + data.length + ' | עמודות: ' + totalCols +
+     (data[0] ? ' | אורך שורה 0: ' + data[0].length : '')
+   );
+   return;
+ }
 
  styleHeader_(sh.getRange(1, 1, 1, totalCols));
  sh.setFrozenRows(2);
@@ -1519,11 +1532,17 @@ function fillGuardTargetAverages() {
  '\nמולאו ' + filled + ' תאים ריקים.\n\nערוך את עמודה B ידנית כדי לשנות מכסה לשומר ספציפי.');
 }
 
-function getCleanSheet_(ss, name) {  
- let sh = ss.getSheetByName(name);  
- if (sh) sh.clearContents().clearFormats().clearConditionalFormatRules();  
- else sh = ss.insertSheet(name);  
- return sh;  
+function getCleanSheet_(ss, name) {
+ let sh = ss.getSheetByName(name);
+ if (sh) {
+   const f = sh.getFilter();
+   if (f) f.remove();
+   sh.clearContents().clearFormats().clearConditionalFormatRules();
+   sh.showRows(1, sh.getMaxRows());
+ } else {
+   sh = ss.insertSheet(name);
+ }
+ return sh;
 }  
   
 function styleHeader_(range) {  
