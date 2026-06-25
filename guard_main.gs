@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.2';
+const GS_VERSION = 'v2.9.3';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -891,7 +891,51 @@ function syncCurrentSchedule_(mgmt, guards, rows, decisions) {
  * מבט מנהל — מה ביקשו + מה שובץ + חריגות
  * ============================================================ */
 function rebuildManagerViewFromMenu() {
-  SpreadsheetApp.getUi().alert('מבט מנהל מתעדכן רק בעת ריצת שיבוץ (▶️ הרץ שיבוץ).');
+  const mgmt = mgmt_();
+  const guards = readGuards_(mgmt);
+  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }
+
+  const sh = mgmt.getSheetByName(SHEET_AVAIL);
+  if (!sh || sh.getLastRow() < 3) {
+    SpreadsheetApp.getUi().alert('אין נתוני שיבוץ — הרץ שיבוץ תחילה.');
+    return;
+  }
+
+  const cfg = readSettings_(mgmt);
+  const blocks = buildBlocks_();
+  const rows = readAvailabilityRows_(mgmt, guards, cfg, blocks);
+
+  // מיפוי: sheetRow → rowIdx ראשון (לצורך בניית decisions)
+  const rowIdxBySheetRow = {};
+  rows.forEach((r, i) => { if (!(r.sheetRow in rowIdxBySheetRow)) rowIdxBySheetRow[r.sheetRow] = i; });
+
+  // קריאת עמודת שיבוץ נוכחי
+  const syncCol = 7 + guards.length;
+  const lastRow = sh.getLastRow();
+  const syncVals = sh.getRange(3, syncCol, lastRow - 2, 1).getValues();
+
+  const decisions = [];
+  const seen = new Set();
+  rows.forEach((r, i) => {
+    if (seen.has(r.sheetRow)) return;
+    seen.add(r.sheetRow);
+    const val = String(syncVals[r.sheetRow - 3]?.[0] || '').trim();
+    if (!val || val === '—' || val === '🚨 ריק') {
+      decisions.push({ rowIdx: i, guard: -1, mode: 'ריק' });
+      return;
+    }
+    val.split(' / ').forEach(name => {
+      name = name.trim();
+      if (!name) return;
+      const gIdx = guards.indexOf(name);
+      decisions.push(gIdx >= 0
+        ? { rowIdx: i, guard: gIdx, mode: 'רגיל' }
+        : { rowIdx: i, guard: -1, mode: 'חיצוני', name });
+    });
+  });
+
+  buildManagerView_(mgmt, guards, rows, decisions);
+  SpreadsheetApp.getUi().alert('✅ מבט מנהל עודכן על בסיס השיבוץ הקיים.');
 }
 
 function buildManagerView_(mgmt, guards, rows, decisions) {
