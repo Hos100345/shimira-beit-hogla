@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.4';
+const GS_VERSION = 'v2.9.5';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1708,7 +1708,10 @@ function saveGuardPreferences(payload) {
           const slotKey = dayName + '|' + slot;
           const sheetRow = rowMap[slotKey];
           if (!sheetRow) return;
-          const slotMark = mark ? String(mark).trim().toUpperCase() : String(RATING_DEFAULT);
+          const raw = mark ? String(mark).trim().toUpperCase() : '';
+          const VALID_MARKS = ['1','2','3','4','5', MARK_BLOCK];
+          const slotMark = VALID_MARKS.includes(raw) ? raw : String(RATING_DEFAULT);
+          sh.getRange(sheetRow, sheetCol).clearDataValidations();
           sh.getRange(sheetRow, sheetCol).setValue(slotMark);
         });
       });
