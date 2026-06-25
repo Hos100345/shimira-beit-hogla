@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.1';
+const GS_VERSION = 'v2.9.2';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1549,6 +1549,7 @@ function getCleanSheet_(ss, name) {
    const f = sh.getFilter();
    if (f) f.remove();
    sh.clearContents().clearFormats().clearConditionalFormatRules();
+   sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations();
    sh.showRows(1, sh.getMaxRows());
  } else {
    sh = ss.insertSheet(name);
