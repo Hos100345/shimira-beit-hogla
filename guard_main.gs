@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.8';
+const GS_VERSION = 'v2.9';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -706,10 +706,10 @@ function replanSchedule() {
  const guards = readGuards_(mgmt);  
  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
   
- const cfg = readSettings_(mgmt);  
- const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
-  
- const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false);
+ const cfg = readSettings_(mgmt);
+ const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
+ const targets = readGuardTargets_(mgmt, guards, calcRequiredHours_(mgmt, guards, cfg));
+ const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false, false, null, targets);
  writeScheduleResult_(mgmt, guards, plan);
 }
 
@@ -718,11 +718,11 @@ function extendAndReplan() {
  const guards = readGuards_(mgmt);  
  if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
   
- const cfg = readSettings_(mgmt);  
- let hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;  
- hardCap += 1;  
-  
- const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false);  
+ const cfg = readSettings_(mgmt);
+ let hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
+ hardCap += 1;
+ const targets = readGuardTargets_(mgmt, guards, calcRequiredHours_(mgmt, guards, cfg));
+ const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false, false, null, targets);
  writeScheduleResult_(mgmt, guards, plan);  
 }  
   
@@ -1005,13 +1005,15 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  }
 
  const debtSensitivity = Number(cfg.DEBT_SENSITIVITY) || 2;
- const adjustedGreen = (Number(cfg.GREEN_MAX_POINTS) || 20) - s.weekdayDebt * debtSensitivity;
- const adjustedYellow = (Number(cfg.YELLOW_MAX_POINTS) || 40) - s.weekdayDebt * debtSensitivity;
+ const relevantDebt = r.isShabbat ? s.shabbatDebt : s.weekdayDebt;
+ const relevantPoints = r.isShabbat ? s.shabbatPoints : s.weekdayPoints;
+ const adjustedGreen = (Number(cfg.GREEN_MAX_POINTS) || 20) - relevantDebt * debtSensitivity;
+ const adjustedYellow = (Number(cfg.YELLOW_MAX_POINTS) || 40) - relevantDebt * debtSensitivity;
 
  let priority = emergencyMode ? 3 : 0;
  if (!emergencyMode) {
- if (s.weekdayPoints + s.shabbatPoints <= adjustedGreen) priority = 0;
- else if (s.weekdayPoints + s.shabbatPoints <= adjustedYellow) priority = 1;
+ if (relevantPoints <= adjustedGreen) priority = 0;
+ else if (relevantPoints <= adjustedYellow) priority = 1;
  else priority = 2;
  }
 
@@ -1440,10 +1442,10 @@ function initState_(guards, mgmt, cfg) {
  const cdhi = head.findIndex(h => h === name + " — חוב חול");  
  const cshi = head.findIndex(h => h === name + " — חוב שבת");  
   
- if (wdi >= 0) st[g].weekdayDebt = Number(lastRow[wdi]) || 0;  
- if (shi >= 0) st[g].shabbatDebt = Number(lastRow[shi]) || 0;  
- if (cdhi >= 0) st[g].weekdayDebt += Number(lastRow[cdhi]) || 0;  
- if (cshi >= 0) st[g].shabbatDebt += Number(lastRow[cshi]) || 0;  
+ if (wdi >= 0) st[g].weekdayPoints = Number(lastRow[wdi]) || 0;
+ if (shi >= 0) st[g].shabbatPoints = Number(lastRow[shi]) || 0;
+ if (cdhi >= 0) st[g].weekdayDebt = Number(lastRow[cdhi]) || 0;
+ if (cshi >= 0) st[g].shabbatDebt = Number(lastRow[cshi]) || 0;  
  });  
   
  return st;  
