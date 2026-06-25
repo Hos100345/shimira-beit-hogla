@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.7';
+const GS_VERSION = 'v2.8';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -637,39 +637,47 @@ function runScheduler() {
     if (resp !== ui.Button.YES) return;
   }
 
+  // זהה מראש שורות שכל השומרים חסומים בהן (X) — שלבים א׳-ד׳ לא יכולים לפתור אותן
+  const allXRowIdxs = new Set(
+    availRows.reduce((acc, r, i) => { if (r.marks.every(m => isBlocked_(m))) acc.push(i); return acc; }, [])
+  );
+  const countNonX = ds => ds.filter(d => d.mode === 'ריק' && !allXRowIdxs.has(d.rowIdx)).length;
+
   let plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows, targets);
   let emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
+  let nonXEmpty = countNonX(plan.decisions);
 
   // שלב א׳ — הגדל מכסה (עד +12 שעות)
   let capAdded = 0;
-  while (emptyCount > 0 && capAdded < 12) {
+  while (nonXEmpty > 0 && capAdded < 12) {
     hardCap++;
     capAdded++;
     plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows, targets);
     emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
+    nonXEmpty = countNonX(plan.decisions);
   }
 
   // שלב ב׳+ג׳ — הפחת זמן מנוחה שלב-שלב עד מינימום 2 שעות
   let restReduced = 0;
   const origRest = Number(cfg.MIN_REST_TIME) || 4;
   let bestCfg = cfg;
-  while (emptyCount > 0 && origRest - restReduced > 2) {
+  while (nonXEmpty > 0 && origRest - restReduced > 2) {
     restReduced++;
     const relaxedCfg = Object.assign({}, cfg, { MIN_REST_TIME: origRest - restReduced });
     const rPlan = buildPlan_(mgmt, guards, relaxedCfg, hardCap, null, null, false, availRows, targets);
     const rEmpty = rPlan.decisions.filter(d => d.mode === 'ריק').length;
-    if (rEmpty < emptyCount) { plan = rPlan; emptyCount = rEmpty; bestCfg = relaxedCfg; }
+    if (rEmpty < emptyCount) { plan = rPlan; emptyCount = rEmpty; nonXEmpty = countNonX(rPlan.decisions); bestCfg = relaxedCfg; }
   }
   const restRelaxed = restReduced > 0;
 
   // שלב ד׳ — הארך משמרות מקסימום ב-+2 שעות
   let shiftExtended = false;
   let bestMaxShift = null;
-  if (emptyCount > 0) {
+  if (nonXEmpty > 0) {
     const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
     const longShiftPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, extShift, null, false, availRows, targets);
     const lsEmpty = longShiftPlan.decisions.filter(d => d.mode === 'ריק').length;
-    if (lsEmpty < emptyCount) { plan = longShiftPlan; emptyCount = lsEmpty; shiftExtended = true; bestMaxShift = extShift; }
+    if (lsEmpty < emptyCount) { plan = longShiftPlan; emptyCount = lsEmpty; nonXEmpty = countNonX(longShiftPlan.decisions); shiftExtended = true; bestMaxShift = extShift; }
   }
 
   // שלב ה׳ — חירום עם ה-cfg הכי מרופה שנמצאה בשלבים הקודמים
@@ -1056,15 +1064,16 @@ function getPartner_(guards, g, r, st, cfg) {
 function backtrack_(decisions, rows, st, guards, failIdx, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode, targets) {  
  const maxBack = Number(cfg.MAX_BACKTRACK_HOURS) || 3;  
  const failRow = rows[failIdx];  
- const backLimit = failRow.startAbs - maxBack;  
-  
+ const backLimit = failRow.startAbs - maxBack;
+ if (failRow.marks.every(m => isBlocked_(m))) return null;
+
  for (let j = decisions.length - 1; j >= 0; j--) {  
  const d = decisions[j];  
  const r = rows[d.rowIdx];  
  if (r.startAbs < backLimit) break;  
  if (r.manual || r.statusExternal || (r.external && r.covered)) continue;  
   
- const savedSt = JSON.parse(JSON.stringify(st));  
+ const savedSt = {}; for (const k in st) savedSt[k] = Object.assign({}, st[k]);
   
  for (let k = j; k < decisions.length; k++) {  
  const kd = decisions[k];  
