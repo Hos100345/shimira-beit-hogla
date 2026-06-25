@@ -251,6 +251,12 @@ function createAvailabilityFile() {
   const mgmt = mgmt_();
   const guards = readGuards_(mgmt);
   if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }
+  const seen = new Set();
+  const dupes = guards.filter(g => { if (seen.has(g)) return true; seen.add(g); return false; });
+  if (dupes.length > 0) {
+    SpreadsheetApp.getUi().alert('⚠️ שמות שומרים כפולים: ' + dupes.join(', ') + '\nאנא תקן לפני המשך.');
+    return;
+  }
   rebuildAvailabilityIn_(mgmt, guards);
   SpreadsheetApp.getUi().alert('✅ לשונית הזמינות נוצרה/עודכנה עבור ' + guards.length + ' שומרים!');
 }
@@ -565,6 +571,33 @@ function runScheduler() {
   const guards = readGuards_(mgmt);
   if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }
 
+  const seenG = new Set();
+  const dupesG = guards.filter(g => { if (seenG.has(g)) return true; seenG.add(g); return false; });
+  if (dupesG.length > 0) {
+    SpreadsheetApp.getUi().alert('⚠️ שמות שומרים כפולים: ' + dupesG.join(', ') + '\nאנא תקן לפני שיבוץ.');
+    return;
+  }
+
+  const avSh = mgmt.getSheetByName(SHEET_AVAIL);
+  if (avSh && avSh.getLastRow() >= 1) {
+    const avLastCol = avSh.getLastColumn();
+    const avHeader = avLastCol >= 6
+      ? avSh.getRange(1, 6, 1, avLastCol - 5).getValues()[0].map(h => String(h).trim())
+      : [];
+    const tableGuards = avHeader.filter(h => h && !h.includes('שיבוץ'));
+    const mismatch = guards.length !== tableGuards.length ||
+      guards.some((g, i) => g.trim() !== (tableGuards[i] || ''));
+    if (mismatch) {
+      SpreadsheetApp.getUi().alert(
+        '⚠️ רשימת השומרים לא מסונכרנת עם טבלת הזמינות!\n\n' +
+        'שומרים נוכחיים: ' + guards.join(', ') + '\n' +
+        'עמודות בטבלה: ' + tableGuards.join(', ') + '\n\n' +
+        'הרץ "📋 בנה טבלת זמינות" לפני שיבוץ.'
+      );
+      return;
+    }
+  }
+
   const cfg = readSettings_(mgmt);
   const settingsCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
 
@@ -579,6 +612,19 @@ function runScheduler() {
   // קרא זמינות פעם אחת — עוברת לכל buildPlan_ כדי לחסוך 17 קריאות Sheets
   const availBlocks = buildBlocks_();
   const availRows = readAvailabilityRows_(mgmt, guards, cfg, availBlocks);
+
+  const emptyGuards = guards.filter((_, gIdx) =>
+    !availRows.some(row => row.marks[gIdx] && String(row.marks[gIdx]).trim() !== MARK_FREE)
+  );
+  if (emptyGuards.length > 0) {
+    const ui = SpreadsheetApp.getUi();
+    const resp = ui.alert(
+      '⚠️ שומרים שלא מילאו זמינות:\n' + emptyGuards.join(', ') +
+      '\n\nהם ישובצו כ"זמין תמיד" בכל המשמרות.\nלהמשיך בכל זאת?',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES) return;
+  }
 
   let plan = buildPlan_(mgmt, guards, cfg, hardCap, null, null, false, availRows, targets);
   let emptyCount = plan.decisions.filter(d => d.mode === 'ריק').length;
