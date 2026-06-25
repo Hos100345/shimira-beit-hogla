@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9';
+const GS_VERSION = 'v2.9.1';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -364,7 +364,7 @@ function rebuildAvailabilityIn_(ss, guards) {
  const vxRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(false).build();
  const manualRule = SpreadsheetApp.newDataValidation()
-   .requireValueInList(guards, true).setAllowInvalid(false).build();
+   .requireValueInList(guards, true).setAllowInvalid(true).build();
  sh.getRange(3, 6, data.length, numG).setDataValidation(vxRule);
  sh.getRange(3, 6 + numG, data.length, 1).setDataValidation(manualRule);
 
