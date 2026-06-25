@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.3';
+const GS_VERSION = 'v2.9.4';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -362,7 +362,7 @@ function rebuildAvailabilityIn_(ss, guards) {
  sh.getRange(3, 5, data.length, 1).setDataValidation(posRule);
 
  const vxRule = SpreadsheetApp.newDataValidation()
-   .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(false).build();
+   .requireValueInList(['1', '2', '3', '4', '5', MARK_BLOCK], true).setAllowInvalid(true).build();
  const manualRule = SpreadsheetApp.newDataValidation()
    .requireValueInList(guards, true).setAllowInvalid(true).build();
  sh.getRange(3, 6, data.length, numG).setDataValidation(vxRule);
@@ -1708,7 +1708,7 @@ function saveGuardPreferences(payload) {
           const slotKey = dayName + '|' + slot;
           const sheetRow = rowMap[slotKey];
           if (!sheetRow) return;
-          const slotMark = mark ? String(mark).trim() : String(RATING_DEFAULT);
+          const slotMark = mark ? String(mark).trim().toUpperCase() : String(RATING_DEFAULT);
           sh.getRange(sheetRow, sheetCol).setValue(slotMark);
         });
       });
