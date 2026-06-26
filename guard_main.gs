@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.5';
+const GS_VERSION = 'v2.9.6';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1673,6 +1673,19 @@ function doGet(e) {
 /* ============================================================  
  * 22. שמירת זמינות מהממשק  
  * ============================================================ */  
+// Maps a 1-hour night slot label to the 2-hour sheet block label.
+// The sheet uses 2-hour night blocks; the HTML form uses 1-hour slots.
+function getNightParentSlot_(slot) {
+  const m = slot.match(/^(\d{2}):00-/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  if (h === 22 || h === 23) return '22:00-00:00';
+  if (h === 0  || h === 1)  return '00:00-02:00';
+  if (h === 2  || h === 3)  return '02:00-04:00';
+  if (h === 4  || h === 5)  return '04:00-06:00';
+  return null;
+}
+
 function saveGuardPreferences(payload) {
   try {
     const mgmt = mgmt_();
@@ -1685,37 +1698,59 @@ function saveGuardPreferences(payload) {
     if (guardCol < 0) throw new Error('שומר לא נמצא ברשימה: [' + resolvedName + '] ' + GS_VERSION);
 
     const sheetCol = 6 + guardCol;
-    const blocks = buildBlocks_();
     const numDays = DAYS.length;
-    const numBlocks = blocks.length;
+    const numBlocks = buildBlocks_().length;
+    const totalRows = numDays * numBlocks;
 
     const rowMap = {};
-    const mapData = sh.getRange(3, 1, numDays * numBlocks, 2).getValues();
+    const mapData = sh.getRange(3, 1, totalRows, 2).getValues();
     mapData.forEach((r, i) => {
       const key = String(r[0]).trim() + '|' + String(r[1]).trim();
       rowMap[key] = 3 + i;
     });
 
+    const VALID_MARKS = ['1','2','3','4','5', MARK_BLOCK]; // ascending restrictiveness
+    // pendingWrites: absolute sheet row → mark (most restrictive wins for night block collisions)
+    const pendingWrites = {};
+
     const daysArray = Array.isArray(payload.days)
       ? payload.days
       : Object.keys(payload.days).sort((a, b) => +a - +b).map(k => payload.days[k]);
+
     daysArray.forEach((dayData, di) => {
       const dayName = DAYS[di];
       Object.keys(dayData).forEach(bk => {
         const slotData = dayData[bk];
         if (!slotData || typeof slotData.slots !== 'object') return;
         Object.entries(slotData.slots).forEach(([slot, mark]) => {
-          const slotKey = dayName + '|' + slot;
-          const sheetRow = rowMap[slotKey];
-          if (!sheetRow) return;
           const raw = mark ? String(mark).trim().toUpperCase() : '';
-          const VALID_MARKS = ['1','2','3','4','5', MARK_BLOCK];
           const slotMark = VALID_MARKS.includes(raw) ? raw : String(RATING_DEFAULT);
-          sh.getRange(sheetRow, sheetCol).clearDataValidations();
-          sh.getRange(sheetRow, sheetCol).setValue(slotMark);
+
+          // Direct lookup; fall back to 2-hour night parent if not found
+          let sheetRow = rowMap[dayName + '|' + slot];
+          if (!sheetRow) {
+            const parent = getNightParentSlot_(slot);
+            if (parent) sheetRow = rowMap[dayName + '|' + parent];
+          }
+          if (!sheetRow) return;
+
+          // Keep the most restrictive mark when multiple 1h slots map to the same 2h row
+          const existing = pendingWrites[sheetRow];
+          if (!existing || VALID_MARKS.indexOf(slotMark) > VALID_MARKS.indexOf(existing)) {
+            pendingWrites[sheetRow] = slotMark;
+          }
         });
       });
     });
+
+    // Batch write: clear validations once, read current column, patch, write back
+    const colRange = sh.getRange(3, sheetCol, totalRows, 1);
+    colRange.clearDataValidations();
+    const colValues = colRange.getValues();
+    Object.entries(pendingWrites).forEach(([row, mark]) => {
+      colValues[parseInt(row, 10) - 3][0] = mark;
+    });
+    colRange.setValues(colValues);
 
     return { success: true, message: "הזמינות נשמרה בהצלחה" };
   } catch (error) {
