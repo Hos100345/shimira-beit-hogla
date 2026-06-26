@@ -97,7 +97,7 @@
   .seg.sel[data-v="1"]{background:var(--l1)}
   .seg.sel[data-v="2"]{background:var(--l2)}
   .seg.sel[data-v="3"]{background:var(--l3)}
-  .seg.sel[data-v="x"]{background:var(--lx)}
+  .seg.sel[data-v="X"]{background:var(--lx)}
   .seg.sel{color:#fff;border-color:transparent;box-shadow:0 3px 8px rgba(0,0,0,.15)}
   .seg.sel .cap{color:rgba(255,255,255,.85)}
   .seg.def[data-v="1"]{background:#E4F0E8;color:var(--l1);border:1.5px dashed var(--l1);box-shadow:none}
@@ -292,7 +292,7 @@
       h += '<button type="button" class="seg'+defClass+'" data-v="'+l.v+'" onclick="setVal(event,this)">'+l.v+
            (l.cap?'<span class="cap">'+l.cap+'</span>':'')+'</button>';
     });
-    h += '<button type="button" class="seg x" data-v="x" onclick="setVal(event,this)">✕</button>';
+    h += '<button type="button" class="seg x" data-v="X" onclick="setVal(event,this)">✕</button>';
     h += '</div>';
     return h;
   }
@@ -536,7 +536,7 @@
           let vTxt = "עדיפות 1";
           if (range.val === "2") vTxt = "עדיפות 2";
           if (range.val === "3") vTxt = "עדיפות 3";
-          if (range.val === "x") vTxt = "✕ לא יכול";
+          if (range.val === "X") vTxt = "✕ לא יכול";
           txt += `• יום ${d.name} | שעות ${range.start}-${range.end} ← ${vTxt}\n`;
         });
       }
@@ -568,7 +568,7 @@
       DAYS.forEach((d, di) => { if (line.includes(`יום ${d.name}`)) foundDayIdx = di; });
       if (foundDayIdx === -1) return;
       let val = "1";
-      if (line.includes("✕") || line.includes("לא יכול") || line.includes("חסימה")) val = "x";
+      if (line.includes("✕") || line.includes("לא יכול") || line.includes("חסימה")) val = "X";
       else if (line.includes("עדיפות 2")) val = "2";
       else if (line.includes("עדיפות 3") || line.includes("אחרון")) val = "3";
       const timeMatch = line.match(/(\d{1,2}:\d{2})[-–](\d{1,2}:\d{2})/);
