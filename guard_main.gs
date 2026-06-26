@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.6';
+const GS_VERSION = 'v2.9.7';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -143,8 +143,11 @@ function onOpen() {
  .addItem('📥 עבד תגובות ממשק', 'loadInterfaceResponsesFromUI')
     .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
  .addItem('⏱️ עדכן ממוצע שעות', 'fillGuardTargetAverages')
-    .addToUi();  
-}  
+    .addSeparator()
+    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T7)', 'runRegressionTests')
+    .addToUi();
+}
+
   
 /* ============================================================  
  * 3. 🏗️ הקמה / שדרוג מבנה  
@@ -610,6 +613,24 @@ function runScheduler() {
   }
 
   const cfg = readSettings_(mgmt);
+
+  // D: אזהרה כאשר WEEK_START_DATE ריק אך גיליון חיצוניים מכיל נתונים
+  if (!cfg.WEEK_START_DATE) {
+    const extShCheck = mgmt.getSheetByName(SHEET_EXTERNAL);
+    if (extShCheck && extShCheck.getLastRow() >= 2) {
+      const ui = SpreadsheetApp.getUi();
+      const resp = ui.alert(
+        '⚠️ חסר WEEK_START_DATE',
+        'גיליון השומרים החיצוניים מכיל נתונים, אך WEEK_START_DATE ריק ב-⚙️ הגדרות.\n' +
+        'שומרים חיצוניים לא ייובאו ובלוקי הלילה יוצגו כ"—".\n\n' +
+        'למלא WEEK_START_DATE בתאריך יום ראשון של השבוע המשובץ.\n\n' +
+        'להמשיך בכל זאת?',
+        ui.ButtonSet.YES_NO
+      );
+      if (resp !== ui.Button.YES) return;
+    }
+  }
+
   const settingsCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
 
   // אוטומטי: חישוב שעות נדרשות והגדרת מכסה ריאלית
@@ -680,12 +701,27 @@ function runScheduler() {
     if (lsEmpty < emptyCount) { plan = longShiftPlan; emptyCount = lsEmpty; nonXEmpty = countNonX(longShiftPlan.decisions); shiftExtended = true; bestMaxShift = extShift; }
   }
 
-  // שלב ה׳ — חירום עם ה-cfg הכי מרופה שנמצאה בשלבים הקודמים
+  // שלב ה׳ — מילוי חירום ממוקד: עבור כל בלוק ריק לא-X, מנסה שיבוץ תוך ביטול מגבלות מנוחה/מכסה.
+  // גישה ממוקדת עדיפה על full-rebuild כי אינה יכולה להגדיל את מספר הבלוקים הריקים.
   let emergencyUsed = false;
   if (emptyCount > 0) {
-    const emergPlan = buildPlan_(mgmt, guards, bestCfg, hardCap, bestMaxShift, false, true, availRows, targets);
-    const eEmpty = emergPlan.decisions.filter(d => d.mode === 'ריק').length;
-    if (eEmpty < emptyCount) { plan = emergPlan; emptyCount = eEmpty; emergencyUsed = true; }
+    const patchSt = {};
+    for (const k in plan.st) patchSt[k] = Object.assign({}, plan.st[k]);
+    const emFuture = new Array(guards.length).fill(0);
+    const maxEmShift = bestMaxShift || (Number(bestCfg.MAX_SHIFT_LENGTH) || 4);
+    const toFill = plan.decisions
+      .filter(d => d.mode === 'ריק' && !allXRowIdxs.has(d.rowIdx))
+      .sort((a, b) => plan.rows[a.rowIdx].startAbs - plan.rows[b.rowIdx].startAbs);
+    let filled = 0;
+    toFill.forEach(d => {
+      const r = plan.rows[d.rowIdx];
+      const excl = new Set(
+        plan.decisions.filter(d2 => plan.rows[d2.rowIdx].sheetRow === r.sheetRow && d2.guard >= 0).map(d2 => d2.guard)
+      );
+      const g = chooseBest_(guards, r, patchSt, hardCap, maxEmShift, emFuture, bestCfg, false, excl, true, targets);
+      if (g !== -1) { d.guard = g; d.mode = 'חירום'; applyAssign_(patchSt, g, r); filled++; }
+    });
+    if (filled > 0) { emergencyUsed = true; emptyCount -= filled; plan.st = patchSt; }
   }
 
   plan.totalInternal = totalInternal;
