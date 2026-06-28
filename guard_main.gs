@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.11.0';
+const GS_VERSION = 'v2.11.1';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -141,7 +141,6 @@ function onOpen() {
  .addItem('📅 טען לוח חיצוניים — יוני 2026', 'fillExternalJune')
  .addItem('📖 צור לשונית הוראות', 'createInstructionsSheet')
  .addItem('🔄 אפס זמינות לשבוע חדש', 'resetAvailability')
- .addItem('📥 עבד תגובות ממשק', 'loadInterfaceResponsesFromUI')
     .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
  .addItem('⏱️ עדכן ממוצע שעות', 'fillGuardTargetAverages')
     .addSeparator()
