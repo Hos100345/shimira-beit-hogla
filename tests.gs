@@ -541,6 +541,29 @@ function runRegressionTests() {
   })();
 
   // ─────────────────────────────────────────────
+  // T14: ללא מכסה אישית (target=0) → התקרה היא hardCap הגלובלי הגָדֵל (שלב א׳ עובד)
+  // ─────────────────────────────────────────────
+  (function() {
+    const g2 = ['א', 'ב'];
+    const st = {
+      0: { hours: 10, run: 0, lastEnd: 0, lastNight: false,
+           weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 },
+      1: { hours: 0, run: 0, lastEnd: 0, lastNight: false,
+           weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 },
+    };
+    const r = { marks: ['1', '1'], isShabbat: false, external: false,
+                startAbs: 100, hours: 1, weight: 1, sheetRow: 3 };
+    const targets0 = { 0: 0, 1: 0 }; // אין מכסה אישית
+    // עם hardCap=10 ושומר 1 מוחרג → שומר 0 בתקרה (10>=10) → -1
+    const atCap = chooseBest_(g2, r, st, 10, 4, [0, 0], testCfg, false, new Set([1]), false, targets0);
+    // אחרי "שלב א׳" שמגדיל ל-12 → שומר 0 כשיר שוב → 0
+    const grown = chooseBest_(g2, r, st, 12, 4, [0, 0], testCfg, false, new Set([1]), false, targets0);
+    const ok = atCap === -1 && grown === 0;
+    results.push({ name: 'T14 — target=0 → תקרה גְדֵלה עם hardCap (שלב א׳)', pass: ok,
+                   info: 'בתקרה=' + atCap + ' אחרי-גידול=' + grown + ' (צפוי -1, 0)' });
+  })();
+
+  // ─────────────────────────────────────────────
   // סיכום
   // ─────────────────────────────────────────────
   const passed = results.filter(function(r) { return r.pass; }).length;
@@ -552,7 +575,7 @@ function runRegressionTests() {
   if (failed > 0) {
     alertUser_('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
   } else {
-    alertUser_('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T13)');
+    alertUser_('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T14)');
   }
 }
 

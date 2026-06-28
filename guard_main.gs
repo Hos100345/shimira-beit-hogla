@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.11.3';
+const GS_VERSION = 'v2.12.0';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -144,7 +144,7 @@ function onOpen() {
     .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
  .addItem('⏱️ עדכן ממוצע שעות', 'fillGuardTargetAverages')
     .addSeparator()
-    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T13)', 'runRegressionTests')
+    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T14)', 'runRegressionTests')
     .addItem('🎲 בדיקות Property (50 תרחישים)', 'runPropertyTests')
     .addItem('💾 שמור Golden', 'runGoldenCapture')
     .addItem('🔍 השווה Golden', 'runGoldenCompare')
@@ -1596,10 +1596,13 @@ function readExternalRows_(mgmt, cfg) {
  const partnerName = String(row[2]).trim();  
  const partnerRange = String(row[3]).trim();  
   
- const diff = Math.round((dateVal - weekStart) / 86400000);  
- if (diff < 0 || diff >= 7) return;  
-  
- const dayName = DAYS[diff];  
+ const diff = Math.round((dateVal - weekStart) / 86400000);
+ if (diff < 0 || diff >= 7) return;
+
+ // מפה לפי יום-בשבוע האמיתי של התאריך (0=ראשון..6=שבת), לא לפי ההיסט מ-weekStart.
+ // כך הייבוא נכון גם כש-WEEK_START_DATE אינו יום ראשון (למשל שבוע שמתחיל בשישי),
+ // ועקבי עם חישוב התאריכים ב-writeSchedule_.
+ const dayName = DAYS[dateVal.getDay()];
  extRows.push({ day: dayName, blockLabel: '22:00-00:00', extName, partnerName, partnerRange });  
  extRows.push({ day: dayName, blockLabel: '00:00-02:00', extName, partnerName: '', partnerRange: '' });  
  });  
@@ -1893,15 +1896,17 @@ function readExternalRaw_(ss) {
 }
 
 // קורא עמודה B מ-SHEET_GUARDS (מכסה שעות לכל שומר).
-// תא ריק / 0 → totalHours / numGuards (ממוצע אוטומטי).
+// מכסה אישית מפורשת (עמודה B). תא ריק/0 → 0, כלומר "ללא מכסה אישית":
+// במקרה כזה chooseBest_ משתמש ב-hardCap הגלובלי (שגדל בשלב א׳) כתקרה.
+// הערה: בעבר הוחזר הממוצע כברירת מחדל — וזה הפך לתקרה קשיחה ששיתקה את שלב א׳,
+// כי לאף שומר לא אופשר לחרוג מהממוצע גם כשהיו משבצות ריקות שניתן היה לכסות.
 function readGuardTargets_(ss, guards, totalHours) {
- const avg = guards.length > 0 ? totalHours / guards.length : 0;
  const sh = ss.getSheetByName(SHEET_GUARDS);
- if (!sh || sh.getLastRow() < 2) return guards.map(() => avg);
+ if (!sh || sh.getLastRow() < 2) return guards.map(() => 0);
  const vals = sh.getRange(2, 2, guards.length, 1).getValues();
  return guards.map((_, i) => {
  const v = Number(vals[i] ? vals[i][0] : 0);
- return v > 0 ? v : avg;
+ return v > 0 ? v : 0;
  });
 }
 
