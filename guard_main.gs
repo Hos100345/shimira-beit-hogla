@@ -1175,36 +1175,30 @@ function recomputeManagerHours_(sh, guards) {
   }
 }
 
-// B2: מסמן חפיפות זמן וחריגות מנוחה לכל שומר (רקע אדום + הערה על תא השיבוץ).
-function flagManagerConflicts_(sh, guards) {
-  const last = sh.getLastRow();
-  if (last < 2) return;
-  const cfg = readSettings_(mgmt_());
-  const minRest = Number(cfg.MIN_REST_TIME) || 4;
-  const nightRest = Number(cfg.NIGHT_REST_TIME) || 8;
-  const data = sh.getRange(2, 1, last - 1, 4).getValues(); // day,label,positions,assignment
-  const n = data.length;
-
+// B2 (לוגיקה טהורה — ניתנת לבדיקה ללא Sheets): מזהה חפיפות זמן וחריגות מנוחה.
+// items: [{day, label, assignment, rowIdx}] — assignment יכול להכיל "א / ב".
+// מחזיר מפה { rowIdx → טקסט הערה } (ריק = אין התנגשות).
+function detectManagerConflicts_(items, guards, minRest, nightRest) {
   const intervals = {}; // name → [{s,e,rowIdx,night}]
-  data.forEach((r, i) => {
-    const day = String(r[0]).trim(), label = String(r[1]).trim(), assignment = String(r[3]).trim();
+  items.forEach(it => {
+    const assignment = String(it.assignment || '').trim();
     if (!assignment || assignment === '—' || assignment === '🚨 ריק') return;
-    const di = DAYS.indexOf(day);
-    const m = label.match(/^(\d{2}):/);
+    const di = DAYS.indexOf(String(it.day).trim());
+    const m = String(it.label).match(/^(\d{2}):/);
     if (di < 0 || !m) return;
     const startH = parseInt(m[1], 10);
-    const h = blockHoursFromLabel_(label);
+    const h = blockHoursFromLabel_(it.label);
     const startAbs = di * 24 + (startH < 6 ? startH + 24 : startH);
     const night = startH >= 22 || startH < 6;
     assignment.split(' / ').forEach(name => {
       name = name.trim();
       if (!guards.includes(name)) return;
       if (!intervals[name]) intervals[name] = [];
-      intervals[name].push({ s: startAbs, e: startAbs + h, rowIdx: i, night });
+      intervals[name].push({ s: startAbs, e: startAbs + h, rowIdx: it.rowIdx, night });
     });
   });
 
-  const conflict = {}; // rowIdx → note text
+  const conflict = {};
   const addNote = (rowIdx, txt) => { conflict[rowIdx] = (conflict[rowIdx] || '') + txt; };
   Object.keys(intervals).forEach(name => {
     const arr = intervals[name].sort((a, b) => a.s - b.s);
@@ -1238,6 +1232,26 @@ function flagManagerConflicts_(sh, guards) {
       }
     }
   });
+
+  return conflict;
+}
+
+// B2: מסמן חפיפות זמן וחריגות מנוחה לכל שומר (רקע אדום + הערה על תא השיבוץ).
+function flagManagerConflicts_(sh, guards) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  const cfg = readSettings_(mgmt_());
+  const minRest = Number(cfg.MIN_REST_TIME) || 4;
+  const nightRest = Number(cfg.NIGHT_REST_TIME) || 8;
+  const data = sh.getRange(2, 1, last - 1, 4).getValues(); // day,label,positions,assignment
+  const n = data.length;
+
+  // בנה רשומות שיבוץ (day,label,assignment,rowIdx) והעבר ללוגיקה הטהורה
+  const items = data.map((r, i) => ({
+    day: String(r[0]).trim(), label: String(r[1]).trim(),
+    assignment: String(r[3]).trim(), rowIdx: i,
+  }));
+  const conflict = detectManagerConflicts_(items, guards, minRest, nightRest);
 
   // החל צבע/הערה בכתיבה אצוותית אחת (התנגשות = אדום + הערה; אחרת צבע בסיס וללא הערה).
   const bgs = [], notes = [];

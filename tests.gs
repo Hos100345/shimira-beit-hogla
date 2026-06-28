@@ -481,6 +481,66 @@ function runRegressionTests() {
   })();
 
   // ─────────────────────────────────────────────
+  // T10–T13: זיהוי התנגשויות במבט מנהל (B2 — detectManagerConflicts_)
+  // ─────────────────────────────────────────────
+  const guards2 = ['א', 'ב'];
+
+  (function() {
+    // T10: משמרת רצופה 06–10 לאותו שומר → אין התנגשות (merge-runs מונע false positive)
+    const items = [
+      { day: 'ראשון', label: '06:00-07:00', assignment: 'א', rowIdx: 0 },
+      { day: 'ראשון', label: '07:00-08:00', assignment: 'א', rowIdx: 1 },
+      { day: 'ראשון', label: '08:00-09:00', assignment: 'א', rowIdx: 2 },
+      { day: 'ראשון', label: '09:00-10:00', assignment: 'א', rowIdx: 3 },
+    ];
+    const c = detectManagerConflicts_(items, guards2, 4, 8);
+    results.push({ name: 'T10 — משמרת רצופה ללא התנגשות', pass: Object.keys(c).length === 0,
+                   info: 'התנגשויות=' + Object.keys(c).length + ' (צפוי 0)' });
+  })();
+
+  (function() {
+    // T11: שתי משמרות עם פער 1ש (<4) → חריגת מנוחה על המשמרת השנייה בלבד
+    const items = [
+      { day: 'ראשון', label: '06:00-07:00', assignment: 'א', rowIdx: 0 },
+      { day: 'ראשון', label: '08:00-09:00', assignment: 'א', rowIdx: 1 },
+    ];
+    const c = detectManagerConflicts_(items, guards2, 4, 8);
+    const ok = !c[0] && c[1] && c[1].indexOf('מנוחה') >= 0;
+    results.push({ name: 'T11 — פער מנוחה קצר מסומן', pass: ok,
+                   info: 'row0=' + (c[0] || '∅') + ' row1=' + (c[1] || '∅') + ' (צפוי מנוחה ב-row1)' });
+  })();
+
+  (function() {
+    // T12: אותו שומר בשני בלוקים חופפים → חפיפת שעות על שני התאים
+    const items = [
+      { day: 'ראשון', label: '06:00-08:00', assignment: 'א', rowIdx: 0 },
+      { day: 'ראשון', label: '07:00-08:00', assignment: 'א', rowIdx: 1 },
+    ];
+    const c = detectManagerConflicts_(items, guards2, 4, 8);
+    const ok = c[0] && c[0].indexOf('חפיפ') >= 0 && c[1] && c[1].indexOf('חפיפ') >= 0;
+    results.push({ name: 'T12 — חפיפת שעות מסומנת', pass: ok,
+                   info: 'row0=' + (c[0] || '∅') + ' row1=' + (c[1] || '∅') + ' (צפוי חפיפה בשניהם)' });
+  })();
+
+  (function() {
+    // T13: שני שומרים שונים באותו בלוק → אין התנגשות; +מנוחת לילה (8ש) אחרי בלוק לילה
+    const itemsTwo = [
+      { day: 'ראשון', label: '06:00-07:00', assignment: 'א', rowIdx: 0 },
+      { day: 'ראשון', label: '06:00-07:00', assignment: 'ב', rowIdx: 1 },
+    ];
+    const cTwo = detectManagerConflicts_(itemsTwo, guards2, 4, 8);
+    // לילה: ראשון 04:00-06:00 (סוף היממה, בלוק לילה) ואז שני 08:00-09:00 — פער 2ש < מנוחת לילה 8ש
+    const itemsNight = [
+      { day: 'ראשון', label: '04:00-06:00', assignment: 'א', rowIdx: 0 },
+      { day: 'שני',   label: '08:00-09:00', assignment: 'א', rowIdx: 1 },
+    ];
+    const cNight = detectManagerConflicts_(itemsNight, guards2, 4, 8);
+    const ok = Object.keys(cTwo).length === 0 && cNight[1] && cNight[1].indexOf('מנוחה<8') >= 0;
+    results.push({ name: 'T13 — שומרים שונים נקי + מנוחת לילה 8ש', pass: ok,
+                   info: 'שני-שומרים=' + Object.keys(cTwo).length + ' לילה-row1=' + (cNight[1] || '∅') });
+  })();
+
+  // ─────────────────────────────────────────────
   // סיכום
   // ─────────────────────────────────────────────
   const passed = results.filter(function(r) { return r.pass; }).length;
@@ -492,7 +552,7 @@ function runRegressionTests() {
   if (failed > 0) {
     SpreadsheetApp.getUi().alert('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
   } else {
-    SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T9)');
+    SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T13)');
   }
 }
 
