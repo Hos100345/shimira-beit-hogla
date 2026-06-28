@@ -640,8 +640,12 @@
     btn.disabled = true;
     btn.textContent = "שולח...";
     google.script.run
-      .withSuccessHandler(function() {
-        document.getElementById("toast").classList.add("show");
+      .withSuccessHandler(function(res) {
+        if (res && res.warning) {
+          alert("⚠️ " + res.message);
+        } else {
+          document.getElementById("toast").classList.add("show");
+        }
         btn.disabled = false;
         btn.textContent = "שליחת הזמינות";
         checkHistoryAvailability();

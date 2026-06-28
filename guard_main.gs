@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.8';
+const GS_VERSION = 'v2.9.9';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1751,6 +1751,9 @@ function saveGuardPreferences(payload) {
     const VALID_MARKS = ['1','2','3','4','5', MARK_BLOCK]; // ascending restrictiveness
     // pendingWrites: absolute sheet row → mark (most restrictive wins for night block collisions)
     const pendingWrites = {};
+    // dropped: meaningful marks (≠1) that could not be mapped to any sheet row.
+    // Surfaced to the user so a mismatched/old availability sheet never fails silently.
+    const dropped = [];
 
     const daysArray = Array.isArray(payload.days)
       ? payload.days
@@ -1771,7 +1774,13 @@ function saveGuardPreferences(payload) {
             const parent = getNightParentSlot_(slot);
             if (parent) sheetRow = rowMap[dayName + '|' + parent];
           }
-          if (!sheetRow) return;
+          if (!sheetRow) {
+            // Only meaningful (non-default) marks matter — a dropped "1" is harmless.
+            if (slotMark !== String(RATING_DEFAULT)) {
+              dropped.push(dayName + ' ' + slot + '=' + slotMark);
+            }
+            return;
+          }
 
           // Keep the most restrictive mark when multiple 1h slots map to the same 2h row
           const existing = pendingWrites[sheetRow];
@@ -1791,6 +1800,16 @@ function saveGuardPreferences(payload) {
     });
     colRange.setValues(colValues);
 
+    if (dropped.length > 0) {
+      Logger.log('סימונים שלא מופו לגיליון (' + dropped.length + '): ' + dropped.join(', '));
+      return {
+        success: true,
+        warning: true,
+        message: 'הזמינות נשמרה, אך ' + dropped.length + ' סימונים לא נשמרו כי לא נמצאו שורות תואמות ' +
+          'בגיליון הזמינות (ייתכן שמבנה הגיליון ישן). אנא הרץ "צור/עדכן קובץ זמינות" וסמן שוב.\n\n' +
+          'סימונים שנפלו: ' + dropped.slice(0, 12).join(' | ') + (dropped.length > 12 ? ' ...' : '')
+      };
+    }
     return { success: true, message: "הזמינות נשמרה בהצלחה" };
   } catch (error) {
     Logger.log("שגיאה בשמירה: " + error.toString());
