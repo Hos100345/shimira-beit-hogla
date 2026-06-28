@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.10.0';
+const GS_VERSION = 'v2.11.0';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1113,7 +1113,12 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
 
   sh.getRange(2, 1, colorMatrix.length, 4 + numG).setBackgrounds(colorMatrix);
 
-  sh.getRange(1, 4 + numG + 2).setValue('מקרא: 🟢 שובץ בנוחות | 🟡 שובץ בקושי | 🟠 קושי גדול | 🔴 שובץ למרות חסימה | 🟦 לא שובץ')
+  // B2: עמודת "שובץ (נוכחי)" ניתנת לעריכה — dropdown של שמות שומרים
+  const assignRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(guards, true).setAllowInvalid(true).build();
+  sh.getRange(2, 4, dataRows.length, 1).setDataValidation(assignRule);
+
+  sh.getRange(1, 4 + numG + 2).setValue('מקרא: 🟢 שובץ בנוחות | 🟡 שובץ בקושי | 🟠 קושי גדול | 🔴 שובץ למרות חסימה | 🟦 לא שובץ | ✏️ ערוך תא "שובץ" כדי לשבץ ידנית (ננעל אוטומטית)')
     .setFontColor('#555555').setFontSize(9).setFontStyle('italic');
 
   sh.setFrozenRows(1);
@@ -1123,6 +1128,172 @@ function buildManagerView_(mgmt, guards, rows, decisions) {
   sh.setColumnWidth(3, 60);
   sh.setColumnWidth(4, 160);
   sh.setColumnWidths(5, numG, 85);
+
+  // B2: סיכום שעות חי + סימון התנגשויות
+  recomputeManagerHours_(sh, guards);
+  flagManagerConflicts_(sh, guards);
+}
+
+// משך בלוק בשעות מתוך תווית כמו "06:00-07:00" או "22:00-00:00".
+function blockHoursFromLabel_(label) {
+  const m = String(label).match(/^(\d{2}):\d{2}-(\d{2}):\d{2}/);
+  if (!m) return 1;
+  let s = parseInt(m[1], 10), e = parseInt(m[2], 10);
+  if (e === 0) e = 24; // 22:00-00:00 → 24
+  let h = e - s;
+  if (h <= 0) h += 24;
+  return h;
+}
+
+// B2: מחשב מחדש את סיכום השעות המשובצות לכל שומר וכותב לאזור הסיכום (מימין למקרא).
+function recomputeManagerHours_(sh, guards) {
+  const numG = guards.length;
+  const last = sh.getLastRow();
+  const hoursByGuard = {};
+  guards.forEach(g => hoursByGuard[g] = 0);
+  if (last >= 2) {
+    const data = sh.getRange(2, 2, last - 1, 3).getValues(); // col2=label, col3=positions, col4=assignment
+    data.forEach(r => {
+      const label = String(r[0]).trim();
+      const assignment = String(r[2]).trim();
+      if (!assignment || assignment === '—' || assignment === '🚨 ריק') return;
+      const h = blockHoursFromLabel_(label);
+      assignment.split(' / ').forEach(name => {
+        name = name.trim();
+        if (hoursByGuard.hasOwnProperty(name)) hoursByGuard[name] += h;
+      });
+    });
+  }
+  const startCol = 4 + numG + 2; // אותו אזור כמו המקרא
+  sh.getRange(3, startCol, 1, 2).setValues([['שומר', 'שעות משובצות']]);
+  styleHeader_(sh.getRange(3, startCol, 1, 2));
+  const summary = guards.map(g => [g, hoursByGuard[g]]);
+  if (summary.length > 0) {
+    sh.getRange(4, startCol, summary.length, 2).setValues(summary);
+    sh.setColumnWidth(startCol, 110);
+    sh.setColumnWidth(startCol + 1, 110);
+  }
+}
+
+// B2: מסמן חפיפות זמן וחריגות מנוחה לכל שומר (רקע אדום + הערה על תא השיבוץ).
+function flagManagerConflicts_(sh, guards) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  const cfg = readSettings_(mgmt_());
+  const minRest = Number(cfg.MIN_REST_TIME) || 4;
+  const nightRest = Number(cfg.NIGHT_REST_TIME) || 8;
+  const data = sh.getRange(2, 1, last - 1, 4).getValues(); // day,label,positions,assignment
+  const n = data.length;
+
+  const intervals = {}; // name → [{s,e,rowIdx,night}]
+  data.forEach((r, i) => {
+    const day = String(r[0]).trim(), label = String(r[1]).trim(), assignment = String(r[3]).trim();
+    if (!assignment || assignment === '—' || assignment === '🚨 ריק') return;
+    const di = DAYS.indexOf(day);
+    const m = label.match(/^(\d{2}):/);
+    if (di < 0 || !m) return;
+    const startH = parseInt(m[1], 10);
+    const h = blockHoursFromLabel_(label);
+    const startAbs = di * 24 + (startH < 6 ? startH + 24 : startH);
+    const night = startH >= 22 || startH < 6;
+    assignment.split(' / ').forEach(name => {
+      name = name.trim();
+      if (!guards.includes(name)) return;
+      if (!intervals[name]) intervals[name] = [];
+      intervals[name].push({ s: startAbs, e: startAbs + h, rowIdx: i, night });
+    });
+  });
+
+  const conflict = {}; // rowIdx → note text
+  const addNote = (rowIdx, txt) => { conflict[rowIdx] = (conflict[rowIdx] || '') + txt; };
+  Object.keys(intervals).forEach(name => {
+    const arr = intervals[name].sort((a, b) => a.s - b.s);
+
+    // חפיפת זמן אמיתית (לא רק נגיעה) — בדיקה זוגית
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        if (arr[i].s < arr[j].e && arr[j].s < arr[i].e) {
+          addNote(arr[i].rowIdx, 'חפיפת שעות (' + name + '); ');
+          addNote(arr[j].rowIdx, 'חפיפת שעות (' + name + '); ');
+        }
+      }
+    }
+
+    // מנוחה: מזג בלוקים רצופים למשמרות, ובדוק פער בין משמרות נפרדות בלבד
+    const runs = [];
+    arr.forEach(iv => {
+      const last = runs[runs.length - 1];
+      if (last && iv.s <= last.e) {            // רצוף או חופף → אותה משמרת
+        last.e = Math.max(last.e, iv.e);
+        last.lastNight = iv.night;             // מנוחה נקבעת לפי הבלוק האחרון במשמרת
+      } else {
+        runs.push({ s: iv.s, e: iv.e, lastNight: iv.night, firstRow: iv.rowIdx });
+      }
+    });
+    for (let k = 1; k < runs.length; k++) {
+      const gap = runs[k].s - runs[k - 1].e;
+      const reqRest = runs[k - 1].lastNight ? nightRest : minRest;
+      if (gap > 0 && gap < reqRest) {
+        addNote(runs[k].firstRow, 'מנוחה<' + reqRest + 'ש (' + name + '); ');
+      }
+    }
+  });
+
+  // החל צבע/הערה בכתיבה אצוותית אחת (התנגשות = אדום + הערה; אחרת צבע בסיס וללא הערה).
+  const bgs = [], notes = [];
+  for (let i = 0; i < n; i++) {
+    if (conflict[i]) {
+      bgs.push(['#ea9999']);
+      notes.push(['⚠️ ' + conflict[i]]);
+    } else {
+      const assignment = String(data[i][3]).trim();
+      const positions = Number(data[i][2]) || 1;
+      let base = '#ffffff';
+      if (!assignment || assignment === '—' || assignment.includes('🚨 ריק')) base = '#f4c7c3';
+      else if (positions > 1 && assignment.split(' / ').length < positions) base = '#fce8b2';
+      bgs.push([base]);
+      notes.push(['']);
+    }
+  }
+  sh.getRange(2, 4, n, 1).setBackgrounds(bgs);
+  sh.getRange(2, 4, n, 1).setNotes(notes);
+}
+
+// B2: טריגר עריכה במבט מנהל — נועל שיבוץ ידני בזמינות + מעדכן שעות והתנגשויות חי.
+function onManagerEdit(e) {
+  // סינון קשוח בתחילת הטריגר למניעת הרצות סרק
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (sh.getName() !== SHEET_MANAGER) return;
+  if (e.range.getNumRows() !== 1 || e.range.getNumColumns() !== 1) return;
+  if (e.range.getColumn() !== 4) return; // רק עמודת "שובץ (נוכחי)"
+  const row = e.range.getRow();
+  if (row < 2) return; // לא שורת כותרת
+
+  const ss = e.source;
+  const guards = readGuards_(ss);
+  const numG = guards.length;
+
+  const day = String(sh.getRange(row, 1).getValue()).trim();
+  const label = String(sh.getRange(row, 2).getValue()).trim();
+  const newVal = String(sh.getRange(row, 4).getValue()).trim();
+
+  // נעל את השיבוץ הידני בגיליון הזמינות כדי שישרוד את buildManagerView_ הבא
+  const avSh = ss.getSheetByName(SHEET_AVAIL);
+  if (avSh && avSh.getLastRow() >= 3) {
+    const manualCol = 6 + numG; // 🔒 שיבוץ ידני
+    const keys = avSh.getRange(3, 1, avSh.getLastRow() - 2, 2).getValues();
+    for (let i = 0; i < keys.length; i++) {
+      if (String(keys[i][0]).trim() === day && String(keys[i][1]).trim() === label) {
+        const lockVal = (!newVal || newVal === '🚨 ריק' || newVal === '—') ? '' : newVal;
+        avSh.getRange(3 + i, manualCol).setValue(lockVal);
+        break;
+      }
+    }
+  }
+
+  recomputeManagerHours_(sh, guards);
+  flagManagerConflicts_(sh, guards);
 }
 
 
@@ -1761,11 +1932,14 @@ function resetAvailability() {
 /* ============================================================  
  * 19. טריגרים  
  * ============================================================ */  
-function setupTriggers() {  
- ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));  
- ScriptApp.newTrigger('resetAvailability').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(6).create();  
- SpreadsheetApp.getUi().alert('✅ טריגר שבועי הוגדר: איפוס זמינות כל ראשון ב-06:00.');  
-}  
+function setupTriggers() {
+ ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+ ScriptApp.newTrigger('resetAvailability').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(6).create();
+ // B2: טריגר עריכה למבט מנהל — עריכה ידנית של שיבוץ נועלת ומעדכנת שעות חי
+ const mgmt = mgmt_();
+ ScriptApp.newTrigger('onManagerEdit').forSpreadsheet(mgmt).onEdit().create();
+ SpreadsheetApp.getUi().alert('✅ טריגרים הוגדרו:\n• איפוס זמינות כל ראשון ב-06:00\n• עריכה ידנית במבט מנהל (נעילה + עדכון שעות חי)');
+}
   
 /* ============================================================  
  * 20. מילוי חיצוניים — יוני 2026  
