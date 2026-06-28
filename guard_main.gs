@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.12.0';
+const GS_VERSION = 'v2.12.1';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -1868,8 +1868,15 @@ function alertUser_(msg) {
 function readGuards_(ss) {
  const sh = ss.getSheetByName(SHEET_GUARDS);
  if (!sh || sh.getLastRow() < 2) return [];
- return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues()
- .map(r => String(r[0]).trim()).filter(n => n);
+ const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+ const out = [];
+ for (let i = 0; i < vals.length; i++) {
+   const name = String(vals[i][0]).trim();
+   if (!name) break;                                  // עצור בשורה ריקה — מתחתיה סיכומים/הערות
+   if (name.indexOf('📊') === 0 || name.indexOf('סה"כ') >= 0) break; // שורת סיכום של "עדכן ממוצע"
+   out.push(name);
+ }
+ return out;
 }
 
 // מפה שם שומר → מכסת שעות (עמודה B ב-SHEET_GUARDS). לשימור מכסות בשדרוג מבנה.
