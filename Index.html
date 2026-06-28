@@ -226,7 +226,7 @@
 </div>
 
 <script>
-  const GUARD = <?= JSON.stringify(guardName) ?>;
+  const GUARD = <?!= JSON.stringify(guardName) ?>;
   const STORAGE_KEY = "guard_prev_state_" + GUARD.replace(/\s+/g, '_');
 
   const DAYS = [

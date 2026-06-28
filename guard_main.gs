@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.11.2';
+const GS_VERSION = 'v2.11.3';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -683,7 +683,7 @@ function runScheduler() {
         '⚠️ רשימת השומרים לא מסונכרנת עם טבלת הזמינות!\n\n' +
         'שומרים נוכחיים: ' + guards.join(', ') + '\n' +
         'עמודות בטבלה: ' + tableGuards.join(', ') + '\n\n' +
-        'הרץ "📋 בנה טבלת זמינות" לפני שיבוץ.'
+        'הרץ "🔗 צור/עדכן קובץ זמינות" לפני שיבוץ.'
       );
       return;
     }
@@ -822,22 +822,25 @@ function replanSchedule() {
  const cfg = readSettings_(mgmt);
  const hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
  const targets = readGuardTargets_(mgmt, guards, calcRequiredHours_(mgmt, guards, cfg));
- const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false, false, null, targets);
+ // jitter=true → פריסה חלופית אמיתית (אחרת מתקבל אותו שיבוץ בדיוק)
+ const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, true, false, null, targets);
  writeScheduleResult_(mgmt, guards, plan);
 }
 
-function extendAndReplan() {  
- const mgmt = mgmt_();  
- const guards = readGuards_(mgmt);  
- if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }  
-  
+function extendAndReplan() {
+ const mgmt = mgmt_();
+ const guards = readGuards_(mgmt);
+ if (guards.length === 0) { SpreadsheetApp.getUi().alert('אין שומרים ברשימה!'); return; }
+
  const cfg = readSettings_(mgmt);
  let hardCap = Number(cfg.MAX_WEEKDAY_DEBT_HOURS) > 0 ? Number(cfg.MAX_WEEKDAY_DEBT_HOURS) + 20 : 24;
  hardCap += 1;
  const targets = readGuardTargets_(mgmt, guards, calcRequiredHours_(mgmt, guards, cfg));
- const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, false, false, null, targets);
- writeScheduleResult_(mgmt, guards, plan);  
-}  
+ // maxShiftOverride מורחב → באמת מאריך משמרות (קודם הועבר null ולא הוארך כלום)
+ const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
+ const plan = buildPlan_(mgmt, guards, cfg, hardCap, extShift, true, false, null, targets);
+ writeScheduleResult_(mgmt, guards, plan);
+}
   
 /* ============================================================  
  * 10. בניית תוכנית שיבוץ  
@@ -1279,6 +1282,7 @@ function flagManagerConflicts_(sh, guards) {
 
 // B2: טריגר עריכה במבט מנהל — נועל שיבוץ ידני בזמינות + מעדכן שעות והתנגשויות חי.
 function onManagerEdit(e) {
+ try {
   // סינון קשוח בתחילת הטריגר למניעת הרצות סרק
   if (!e || !e.range) return;
   const sh = e.range.getSheet();
@@ -1312,6 +1316,9 @@ function onManagerEdit(e) {
 
   recomputeManagerHours_(sh, guards);
   flagManagerConflicts_(sh, guards);
+ } catch (err) {
+  console.log('onManagerEdit error (התעלם): ' + err.message);
+ }
 }
 
 
@@ -1509,6 +1516,9 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
   const extRows = readExternalRows_(mgmt, cfg);
   const rows = [];
 
+  // קרא משקלים פעם אחת (קודם נקרא בתוך הלולאה — 140 קריאות מיותרות לכל שיבוץ)
+  const weights = cfg ? readWeights_(mgmt) : { 'יום': 1, 'ערב': 2, 'לילה': 3, 'מוצ"ש': 2, 'תפילות שבת': 3 };
+
   let absBase = 0;
   let prevDay = null;
 
@@ -1543,7 +1553,6 @@ function readAvailabilityRows_(mgmt, guards, cfg, blocks) {
 
     const dayIdx = DAYS.indexOf(day);
     const isShabbat = cfg ? isShabbat_(day, bStart, cfg) : false;
-    const weights = cfg ? readWeights_(mgmt) : { 'יום': 1, 'ערב': 2, 'לילה': 3, 'מוצ"ש': 2, 'תפילות שבת': 3 };
     const weight = blockWeight_(day, block, weights, cfg, marks);
 
     if (!block.external && positions === 0) return;
