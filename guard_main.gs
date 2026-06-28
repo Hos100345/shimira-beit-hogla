@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.11.1';
+const GS_VERSION = 'v2.11.2';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -169,11 +169,11 @@ function setupV2() {
  const prevQuotas   = readGuardQuotas_(ss);  // שם שומר → מכסה
  const prevExternal = readExternalRaw_(ss);  // שורות חיצוניים גולמיות
 
- // אזהרה לפני בנייה מחדש כאשר קיימים נתונים
+ // אזהרה לפני בנייה מחדש כאשר קיימים נתונים (רק אם קיים הקשר UI; הרצה מהעורך מדלגת)
  const hasExistingData = Object.keys(prevSettings).some(k => prevSettings[k] !== '' && prevSettings[k] !== undefined)
    || prevExternal.length > 0 || Object.keys(prevQuotas).length > 0;
- if (hasExistingData) {
-   const ui = SpreadsheetApp.getUi();
+ const ui = safeUi_();
+ if (hasExistingData && ui) {
    const resp = ui.alert(
      '🏗️ שדרוג מבנה',
      'פעולה זו בונה מחדש את מבנה הגיליונות.\n\n' +
@@ -1836,10 +1836,22 @@ function setSettingsValue_(ss, key, value) {
 /* ============================================================  
  * 17. עזרים כלליים  
  * ============================================================ */  
-function mgmt_() {  
- const id = PropertiesService.getScriptProperties().getProperty('MGMT_ID');  
- return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();  
-}  
+function mgmt_() {
+ const id = PropertiesService.getScriptProperties().getProperty('MGMT_ID');
+ return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+}
+
+// מחזיר את ה-UI אם קיים הקשר (פתיחת גיליון/תפריט), או null בהרצה מהעורך/טריגר.
+// מאפשר לפונקציות לרוץ גם מהעורך בלי לזרוק "Cannot call getUi() from this context".
+function safeUi_() {
+ try { return SpreadsheetApp.getUi(); } catch (e) { return null; }
+}
+
+// הצגת הודעה למשתמש אם יש UI, אחרת רישום ללוג (להרצה מהעורך/טריגר).
+function alertUser_(msg) {
+ const ui = safeUi_();
+ if (ui) ui.alert(msg); else console.log(msg);
+}
   
 function readGuards_(ss) {
  const sh = ss.getSheetByName(SHEET_GUARDS);

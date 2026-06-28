@@ -105,9 +105,9 @@ function runAllTests() {
     console.log((r.pass ? '✅' : '❌') + ' ' + r.name + ' — ' + r.info);
   });
   if (failed > 0) {
-    SpreadsheetApp.getUi().alert('❌ ' + failed + ' בדיקות נכשלו — בדוק Logger לפרטים.');
+    alertUser_('❌ ' + failed + ' בדיקות נכשלו — בדוק Logger לפרטים.');
   } else {
-    SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' הבדיקות עברו בהצלחה!');
+    alertUser_('✅ כל ' + passed + ' הבדיקות עברו בהצלחה!');
   }
 }
 
@@ -550,9 +550,9 @@ function runRegressionTests() {
     console.log((r.pass ? '✅' : '❌') + ' ' + r.name + ' — ' + r.info);
   });
   if (failed > 0) {
-    SpreadsheetApp.getUi().alert('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
+    alertUser_('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
   } else {
-    SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T13)');
+    alertUser_('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T13)');
   }
 }
 
@@ -614,11 +614,11 @@ function runPropertyTests() {
   failDetails.forEach(function(msg) { console.log('❌ ' + msg); });
 
   if (totalFails === 0) {
-    SpreadsheetApp.getUi().alert('✅ כל ' + N + ' תרחישי Property עברו ללא הפרות Invariant');
+    alertUser_('✅ כל ' + N + ' תרחישי Property עברו ללא הפרות Invariant');
   } else {
     const preview = failDetails.slice(0, 5).join('\n');
     const suffix = failDetails.length > 5 ? '\n...ועוד — בדוק Logger' : '';
-    SpreadsheetApp.getUi().alert(
+    alertUser_(
       '❌ ' + totalFails + '/' + N + ' תרחישים הפרו Invariants:\n\n' + preview + suffix
     );
   }
@@ -631,19 +631,19 @@ function runPropertyTests() {
 function runGoldenCapture() {
   const mgmt = SpreadsheetApp.getActiveSpreadsheet();
   const avSh = mgmt.getSheetByName(SHEET_AVAIL);
-  if (!avSh) { SpreadsheetApp.getUi().alert('❌ לא נמצא גיליון זמינות'); return; }
+  if (!avSh) { alertUser_('❌ לא נמצא גיליון זמינות'); return; }
 
   const lastCol = avSh.getLastColumn();
-  if (lastCol < 1) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות ריק'); return; }
+  if (lastCol < 1) { alertUser_('❌ גיליון זמינות ריק'); return; }
   const headerRow = avSh.getRange(1, 1, 1, lastCol).getValues()[0];
   const syncCol = headerRow.indexOf('📅 שיבוץ נוכחי') + 1;
   if (syncCol <= 0) {
-    SpreadsheetApp.getUi().alert('❌ לא נמצאה עמודת "📅 שיבוץ נוכחי" — הרץ שיבוץ תחילה');
+    alertUser_('❌ לא נמצאה עמודת "📅 שיבוץ נוכחי" — הרץ שיבוץ תחילה');
     return;
   }
 
   const lastRow = avSh.getLastRow();
-  if (lastRow < 3) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות ריק'); return; }
+  if (lastRow < 3) { alertUser_('❌ גיליון זמינות ריק'); return; }
 
   const numDataRows = lastRow - 2;
   const vals = avSh.getRange(3, 1, numDataRows, syncCol).getValues();
@@ -655,7 +655,7 @@ function runGoldenCapture() {
   if (goldenData.length > 0) {
     goldenSh.getRange(2, 1, goldenData.length, 3).setValues(goldenData);
   }
-  SpreadsheetApp.getUi().alert('✅ Golden נשמר: ' + goldenData.length + ' שורות ב-' + SHEET_GOLDEN);
+  alertUser_('✅ Golden נשמר: ' + goldenData.length + ' שורות ב-' + SHEET_GOLDEN);
 }
 
 function runGoldenCompare() {
@@ -663,9 +663,9 @@ function runGoldenCompare() {
   const avSh = mgmt.getSheetByName(SHEET_AVAIL);
   const goldenSh = mgmt.getSheetByName(SHEET_GOLDEN);
 
-  if (!avSh) { SpreadsheetApp.getUi().alert('❌ לא נמצא גיליון זמינות'); return; }
+  if (!avSh) { alertUser_('❌ לא נמצא גיליון זמינות'); return; }
   if (!goldenSh || goldenSh.getLastRow() < 2) {
-    SpreadsheetApp.getUi().alert('❌ אין Golden לשם השוואה — הרץ "💾 שמור Golden" תחילה');
+    alertUser_('❌ אין Golden לשם השוואה — הרץ "💾 שמור Golden" תחילה');
     return;
   }
 
@@ -677,12 +677,12 @@ function runGoldenCompare() {
   const headerRow = avSh.getRange(1, 1, 1, lastCol).getValues()[0];
   const syncCol = headerRow.indexOf('📅 שיבוץ נוכחי') + 1;
   if (syncCol <= 0) {
-    SpreadsheetApp.getUi().alert('❌ לא נמצאה עמודת "📅 שיבוץ נוכחי" — הרץ שיבוץ תחילה');
+    alertUser_('❌ לא נמצאה עמודת "📅 שיבוץ נוכחי" — הרץ שיבוץ תחילה');
     return;
   }
 
   const lastRow = avSh.getLastRow();
-  if (lastRow < 3) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות ריק'); return; }
+  if (lastRow < 3) { alertUser_('❌ גיליון זמינות ריק'); return; }
 
   const numDataRows = lastRow - 2;
   const vals = avSh.getRange(3, 1, numDataRows, syncCol).getValues();
@@ -708,10 +708,10 @@ function runGoldenCompare() {
 
   diffs.forEach(function(d) { console.log(d); });
   if (diffs.length === 0) {
-    SpreadsheetApp.getUi().alert('✅ השיבוץ הנוכחי זהה ל-Golden (ללא הבדלים)');
+    alertUser_('✅ השיבוץ הנוכחי זהה ל-Golden (ללא הבדלים)');
   } else {
     const preview = diffs.slice(0, 10).join('\n');
     const suffix = diffs.length > 10 ? '\n...ועוד ' + (diffs.length - 10) + ' — בדוק Logger' : '';
-    SpreadsheetApp.getUi().alert('⚠️ נמצאו ' + diffs.length + ' הבדלים:\n\n' + preview + suffix);
+    alertUser_('⚠️ נמצאו ' + diffs.length + ' הבדלים:\n\n' + preview + suffix);
   }
 }
