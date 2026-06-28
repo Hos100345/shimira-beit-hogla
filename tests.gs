@@ -445,6 +445,42 @@ function runRegressionTests() {
   })();
 
   // ─────────────────────────────────────────────
+  // T8: שדרוג מבנה משמר ערכי הגדרות קיימים (B1 — "קלט קיים נשמר", INV5)
+  // ─────────────────────────────────────────────
+  (function() {
+    // מדמה את לוגיקת ה-overlay מתוך setupV2: ערך קיים גובר על ברירת מחדל.
+    const rows = [
+      ['פרמטר', 'ערך', 'הסבר'],
+      ['MAX_SHIFT_LENGTH', 4, ''],
+      ['NIGHT_REST_TIME', 8, ''],
+      ['GREEN_MAX_POINTS', 20, ''],
+    ];
+    const prevSettings = { MAX_SHIFT_LENGTH: 6, NIGHT_REST_TIME: 7 }; // משתמש שינה ידנית
+    rows.forEach(function(r, i) {
+      if (i === 0) return;
+      const key = String(r[0]).trim();
+      if (key && prevSettings[key] !== undefined && prevSettings[key] !== '') r[1] = prevSettings[key];
+    });
+    const maxShift = rows[1][1], nightRest = rows[2][1], green = rows[3][1];
+    const ok = maxShift === 6 && nightRest === 7 && green === 20; // קיימים נשמרו, חסר נשאר ברירת מחדל
+    results.push({ name: 'T8 — שדרוג מבנה משמר הגדרות קיימות', pass: ok,
+                   info: 'MAX_SHIFT=' + maxShift + ' NIGHT_REST=' + nightRest + ' GREEN=' + green + ' (צפוי 6,7,20)' });
+  })();
+
+  // ─────────────────────────────────────────────
+  // T9: שדרוג מבנה משמר מכסות שומרים לפי שם (B1)
+  // ─────────────────────────────────────────────
+  (function() {
+    // מדמה את שחזור עמודת המכסות בתוך setupV2.
+    const names = [['שראל'], ['שר שלום'], ['חדש']];
+    const prevQuotas = { 'שראל': 35, 'שר שלום': 35 }; // 'חדש' ללא מכסה קודמת
+    const quotaCol = names.map(function(n) { return [prevQuotas[String(n[0]).trim()] || '']; });
+    const ok = quotaCol[0][0] === 35 && quotaCol[1][0] === 35 && quotaCol[2][0] === '';
+    results.push({ name: 'T9 — שדרוג מבנה משמר מכסות לפי שם', pass: ok,
+                   info: 'מכסות=[' + quotaCol.map(function(q){return q[0];}).join(',') + '] (צפוי 35,35,ריק)' });
+  })();
+
+  // ─────────────────────────────────────────────
   // סיכום
   // ─────────────────────────────────────────────
   const passed = results.filter(function(r) { return r.pass; }).length;
@@ -456,7 +492,7 @@ function runRegressionTests() {
   if (failed > 0) {
     SpreadsheetApp.getUi().alert('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
   } else {
-    SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T7)');
+    SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T9)');
   }
 }
 

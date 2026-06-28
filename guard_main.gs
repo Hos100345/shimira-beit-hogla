@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.9.9';
+const GS_VERSION = 'v2.10.0';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -155,12 +155,34 @@ function onOpen() {
 /* ============================================================  
  * 3. 🏗️ הקמה / שדרוג מבנה  
  * ============================================================ */  
-function setupV2() {  
- const ss = SpreadsheetApp.getActiveSpreadsheet();  
- PropertiesService.getScriptProperties().setProperty('MGMT_ID', ss.getId());  
-  
- const sh = getCleanSheet_(ss, SHEET_SETTINGS);  
- sh.setRightToLeft(true);  
+function setupV2() {
+ const ss = SpreadsheetApp.getActiveSpreadsheet();
+ PropertiesService.getScriptProperties().setProperty('MGMT_ID', ss.getId());
+
+ // ── B1: שמירה על נתונים קיימים — קרא הכל לפני בנייה מחדש ──
+ const prevSettings = readSettings_(ss);     // key → value
+ const prevWeights  = readWeights_(ss);      // סוג בלוק → משקל
+ const prevQuotas   = readGuardQuotas_(ss);  // שם שומר → מכסה
+ const prevExternal = readExternalRaw_(ss);  // שורות חיצוניים גולמיות
+
+ // אזהרה לפני בנייה מחדש כאשר קיימים נתונים
+ const hasExistingData = Object.keys(prevSettings).some(k => prevSettings[k] !== '' && prevSettings[k] !== undefined)
+   || prevExternal.length > 0 || Object.keys(prevQuotas).length > 0;
+ if (hasExistingData) {
+   const ui = SpreadsheetApp.getUi();
+   const resp = ui.alert(
+     '🏗️ שדרוג מבנה',
+     'פעולה זו בונה מחדש את מבנה הגיליונות.\n\n' +
+     'ערכי הגדרות, משקלי קושי, מכסות שעות, ושומרים חיצוניים קיימים — יישמרו וישוחזרו אוטומטית.\n' +
+     'טבלת הזמינות (📋 זמינות) אינה מושפעת מפעולה זו.\n\n' +
+     'להמשיך?',
+     ui.ButtonSet.YES_NO
+   );
+   if (resp !== ui.Button.YES) return;
+ }
+
+ const sh = getCleanSheet_(ss, SHEET_SETTINGS);
+ sh.setRightToLeft(true);
  const rows = [
  ['פרמטר', 'ערך', 'הסבר'],
  ['⏱ זמני משמרות ומנוחה', '', ''],
@@ -185,6 +207,14 @@ function setupV2() {
  ['PUBLISH_SPREADSHEET_ID', '', 'מזהה Google Sheets לפרסום לוח השמירות לשומרים (ממולא אוטומטית)'],
  ['EXTERNAL_SPREADSHEET_ID', '', 'מזהה קובץ נפרד לשומרים חיצוניים; ריק = קריאה מהטבלה המקומית'],
  ];
+ // B1: שחזר ערכי הגדרות קיימים על גבי מבנה ברירת המחדל (שמירה ולא דריסה)
+ rows.forEach((r, i) => {
+   if (i === 0) return; // שורת כותרת 'פרמטר','ערך','הסבר'
+   const key = String(r[0]).trim();
+   if (key && prevSettings[key] !== undefined && prevSettings[key] !== '') {
+     r[1] = prevSettings[key];
+   }
+ });
  sh.getRange(1, 1, rows.length, 3).setValues(rows);
  styleHeader_(sh.getRange(1, 1, 1, 3));
  sh.getRange(2, 2, rows.length - 1, 1).setBackground('#fff2cc');
@@ -195,11 +225,17 @@ function setupV2() {
  });
  sh.getRange(20, 2).setNumberFormat('dd/mm/yyyy');  
   
- const w = [  
- ['סוג בלוק', 'משקל קושי'],  
- ['יום', 1], ['ערב', 2], ['מוצ"ש', 2], ['לילה', 3], ['תפילות שבת', 3],  
- ];  
- sh.getRange(1, 5, w.length, 2).setValues(w);  
+ const w = [
+ ['סוג בלוק', 'משקל קושי'],
+ ['יום', 1], ['ערב', 2], ['מוצ"ש', 2], ['לילה', 3], ['תפילות שבת', 3],
+ ];
+ // B1: שחזר משקלי קושי קיימים
+ w.forEach((r, i) => {
+   if (i === 0) return;
+   const key = String(r[0]).trim();
+   if (prevWeights[key] !== undefined) r[1] = prevWeights[key];
+ });
+ sh.getRange(1, 5, w.length, 2).setValues(w);
  styleHeader_(sh.getRange(1, 5, 1, 2));  
  sh.getRange(2, 6, w.length - 1, 1).setBackground('#fff2cc');  
  sh.setColumnWidth(1, 220).setColumnWidth(3, 340).setColumnWidth(5, 130).setFrozenRows(1);  
@@ -213,12 +249,15 @@ function setupV2() {
  if (ex.length > 0) names = ex;  
  }  
  }  
- const gs = getCleanSheet_(ss, SHEET_GUARDS);  
- gs.setRightToLeft(true);  
+ const gs = getCleanSheet_(ss, SHEET_GUARDS);
+ gs.setRightToLeft(true);
  gs.getRange(1, 1, 1, 2).setValues([['שם השומר', 'מכסה שעות']]);
  gs.getRange(2, 1, names.length, 1).setValues(names);
+ // B1: שחזר מכסות שעות קיימות (עמודה B) לפי שם השומר
+ const quotaCol = names.map(n => [prevQuotas[String(n[0]).trim()] || '']);
+ gs.getRange(2, 2, names.length, 1).setValues(quotaCol);
  styleHeader_(gs.getRange(1, 1, 1, 2));
- gs.setColumnWidth(2, 120);  
+ gs.setColumnWidth(2, 120);
   
  const ex = getCleanSheet_(ss, SHEET_EXTERNAL);  
  ex.setRightToLeft(true);  
@@ -227,10 +266,15 @@ function setupV2() {
  ex.getRange(2, 1, 31, 1).setNumberFormat('dd/mm/yyyy');  
  const rangeRule = SpreadsheetApp.newDataValidation()  
  .requireValueInList(['02:00-06:00', '04:00-06:00'], true).setAllowInvalid(true).build();  
- ex.getRange(2, 4, 31, 1).setDataValidation(rangeRule);  
- ex.setColumnWidth(1, 110).setColumnWidths(2, 2, 200).setColumnWidth(4, 120).setFrozenRows(1);  
- ex.getRange(1, 6).setValue('💡 אם השותף ב-02-06 הוא אחד מהקבועים — המערכת מזהה לבד: קרדיט מלא + מנוחת לילה אחרי. טווח שותף ריק = משמרת מלאה (02-06). "04:00-06:00" = סיור קצר, ו-02-04 הופך לפנימי רגיל.')  
- .setFontColor('#666666');  
+ ex.getRange(2, 4, 31, 1).setDataValidation(rangeRule);
+ ex.setColumnWidth(1, 110).setColumnWidths(2, 2, 200).setColumnWidth(4, 120).setFrozenRows(1);
+ ex.getRange(1, 6).setValue('💡 אם השותף ב-02-06 הוא אחד מהקבועים — המערכת מזהה לבד: קרדיט מלא + מנוחת לילה אחרי. טווח שותף ריק = משמרת מלאה (02-06). "04:00-06:00" = סיור קצר, ו-02-04 הופך לפנימי רגיל.')
+ .setFontColor('#666666');
+ // B1: שחזר נתוני שומרים חיצוניים שנקראו לפני הבנייה מחדש
+ if (prevExternal.length > 0) {
+   ex.getRange(2, 1, prevExternal.length, 4).setValues(prevExternal);
+   ex.getRange(2, 1, prevExternal.length, 1).setNumberFormat('dd/mm/yyyy');
+ }
   
  const hi = ss.getSheetByName(SHEET_HISTORY) || ss.insertSheet(SHEET_HISTORY);  
  hi.setRightToLeft(true);  
@@ -262,8 +306,34 @@ function createAvailabilityFile() {
     SpreadsheetApp.getUi().alert('⚠️ שמות שומרים כפולים: ' + dupes.join(', ') + '\nאנא תקן לפני המשך.');
     return;
   }
+
+  // B1: ספור סימוני זמינות קיימים (≠1) והזהר לפני בנייה מחדש שתשמר אותם
+  const existingMarks = readExistingAvailabilityMarks_(mgmt, guards);
+  let nonDefault = 0;
+  Object.values(existingMarks).forEach(byKey => {
+    Object.values(byKey).forEach(v => {
+      const s = String(v).trim().toUpperCase();
+      if (s && s !== MARK_FREE) nonDefault++;
+    });
+  });
+  if (nonDefault > 0) {
+    const ui = SpreadsheetApp.getUi();
+    const resp = ui.alert(
+      '🔗 צור/עדכן קובץ זמינות',
+      'בטבלת הזמינות קיימים ' + nonDefault + ' סימונים שאינם ברירת מחדל (✕ / 2-5).\n\n' +
+      'הפעולה תבנה מחדש את מבנה הטבלה ותשמר את כל הסימונים הקיימים.\n' +
+      'אם שם שומר השתנה — ייתכן שסימונים של אותו שומר לא ימופו.\n\n' +
+      'להמשיך?',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES) return;
+  }
+
   rebuildAvailabilityIn_(mgmt, guards);
-  SpreadsheetApp.getUi().alert('✅ לשונית הזמינות נוצרה/עודכנה עבור ' + guards.length + ' שומרים!');
+  SpreadsheetApp.getUi().alert(
+    '✅ לשונית הזמינות נוצרה/עודכנה עבור ' + guards.length + ' שומרים!' +
+    (nonDefault > 0 ? '\nנשמרו ' + nonDefault + ' סימונים קיימים.' : '')
+  );
 }
   
 function readExistingAvailabilityMarks_(ss, guards) {
@@ -1587,6 +1657,29 @@ function readGuards_(ss) {
  if (!sh || sh.getLastRow() < 2) return [];
  return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues()
  .map(r => String(r[0]).trim()).filter(n => n);
+}
+
+// מפה שם שומר → מכסת שעות (עמודה B ב-SHEET_GUARDS). לשימור מכסות בשדרוג מבנה.
+function readGuardQuotas_(ss) {
+ const sh = ss.getSheetByName(SHEET_GUARDS);
+ const map = {};
+ if (!sh || sh.getLastRow() < 2) return map;
+ const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+ vals.forEach(r => {
+   const name = String(r[0]).trim();
+   if (name && r[1] !== '' && r[1] !== undefined && r[1] !== null && Number(r[1]) > 0) {
+     map[name] = Number(r[1]);
+   }
+ });
+ return map;
+}
+
+// קורא את שורות הנתונים הגולמיות מ-SHEET_EXTERNAL (4 עמודות). לשימור בשדרוג מבנה.
+function readExternalRaw_(ss) {
+ const sh = ss.getSheetByName(SHEET_EXTERNAL);
+ if (!sh || sh.getLastRow() < 2) return [];
+ const data = sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues();
+ return data.filter(r => r.some(c => c !== '' && c !== null && c !== undefined));
 }
 
 // קורא עמודה B מ-SHEET_GUARDS (מכסה שעות לכל שומר).
