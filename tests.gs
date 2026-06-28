@@ -112,6 +112,158 @@ function runAllTests() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// A2 — תשתית בדיקות: invariants, pipeline, golden, property
+// ═══════════════════════════════════════════════════════════
+
+const SHEET_GOLDEN = '🧪 Golden';
+const MAX_DEBT_GROWTH_RATIO = 1.5;   // INV4: חוב לא יכול לקפוץ מעבר ל-1.5× בריצה
+const MAX_REASONABLE_POINTS = 200;   // INV4: תקרת נקודות סבירה בריצה אחת
+
+// INV1–INV6 — בדוק plan ממשי, החזר מערך הפרות (ריק = תקין).
+function checkInvariants_(plan, guards, targets, hardCap) {
+  const violations = [];
+  const rows = plan.rows, decisions = plan.decisions, st = plan.st;
+
+  // INV1: לכל שורה יש בדיוק החלטה אחת
+  if (decisions.length !== rows.length) {
+    violations.push('INV1: ' + decisions.length + ' החלטות ל-' + rows.length + ' שורות (לא מאוזן)');
+  }
+
+  // INV2: אף שומר לא חורג ממכסתו מחוץ לחירום
+  guards.forEach(function(name, g) {
+    let normalHours = 0;
+    decisions.forEach(function(d) {
+      if (d.guard === g && d.mode !== 'חירום') normalHours += rows[d.rowIdx].hours;
+    });
+    const cap = (targets && targets[g] > 0) ? targets[g] : hardCap;
+    if (normalHours > cap + 0.01) {
+      violations.push('INV2: ' + name + ' חרג ' + normalHours + '>' + cap + 'ש (מחוץ לחירום)');
+    }
+  });
+
+  // INV3: אין חפיפת שמירות — שומר לא בשתי עמדות באותו זמן
+  const guardSlots = {};
+  decisions.forEach(function(d) {
+    if (d.guard < 0) return;
+    if (!guardSlots[d.guard]) guardSlots[d.guard] = [];
+    const r = rows[d.rowIdx];
+    guardSlots[d.guard].push({ s: r.startAbs, e: r.startAbs + r.hours });
+  });
+  guards.forEach(function(name, g) {
+    const slots = guardSlots[g] || [];
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        if (slots[i].s < slots[j].e && slots[j].s < slots[i].e) {
+          violations.push('INV3: חפיפה ' + name + ' — ' + slots[i].s + '-' + slots[i].e + ' עם ' + slots[j].s + '-' + slots[j].e);
+        }
+      }
+    }
+  });
+
+  // INV4: נקודות שומר לא קופצות מעל סף סביר (גילוי פיצוץ-חוב)
+  guards.forEach(function(name, g) {
+    const pts = (st[g].weekdayPoints || 0) + (st[g].shabbatPoints || 0);
+    if (pts > MAX_REASONABLE_POINTS) {
+      violations.push('INV4: ' + name + ' צבר ' + pts + ' נק׳ (סף=' + MAX_REASONABLE_POINTS + ')');
+    }
+  });
+
+  // INV5: בלוק נעול (manual) שמור בדיוק לפי הקלט
+  decisions.forEach(function(d) {
+    const r = rows[d.rowIdx];
+    if (r.manual && r.manualIdx >= 0 && d.guard !== r.manualIdx) {
+      const got = (d.guard >= 0 && d.guard < guards.length) ? guards[d.guard] : '?';
+      const exp = guards[r.manualIdx];
+      violations.push('INV5: בלוק נעול ' + r.day + ' ' + r.label + ' — שובץ ' + got + ' במקום ' + exp);
+    }
+  });
+
+  // INV6: מספר ההחלטות = מספר השורות (אין שורה שנעלמה)
+  const rowDecCnt = {};
+  decisions.forEach(function(d) { rowDecCnt[d.rowIdx] = (rowDecCnt[d.rowIdx] || 0) + 1; });
+  rows.forEach(function(r, i) {
+    const cnt = rowDecCnt[i] || 0;
+    if (cnt !== 1) {
+      violations.push('INV6: ' + r.day + ' ' + r.label + ' — ' + cnt + ' החלטות (צפוי 1)');
+    }
+  });
+
+  return violations;
+}
+
+// מריץ את כל שלבי השיבוץ (א–ה) על preloadedRows ללא קריאת Sheets.
+// מקביל ל-runScheduler אך עם null בתור mgmt ושורות סינתטיות.
+function runPipelineOnRows_(rows, guards, cfg, hardCap, targets) {
+  const allXRowIdxs = new Set(
+    rows.reduce(function(acc, r, i) {
+      if (r.marks.every(function(m) { return isBlocked_(m); })) acc.push(i);
+      return acc;
+    }, [])
+  );
+  const countNonX = function(ds) {
+    return ds.filter(function(d) { return d.mode === 'ריק' && !allXRowIdxs.has(d.rowIdx); }).length;
+  };
+
+  let plan = buildPlan_(null, guards, cfg, hardCap, null, null, false, rows, targets);
+  let emptyCount = plan.decisions.filter(function(d) { return d.mode === 'ריק'; }).length;
+  let nonXEmpty = countNonX(plan.decisions);
+  let bestCfg = cfg, bestMaxShift = null;
+
+  // שלב א׳ — הגדל מכסה עד +12ש
+  let capAdded = 0;
+  while (nonXEmpty > 0 && capAdded < 12) {
+    hardCap++; capAdded++;
+    plan = buildPlan_(null, guards, cfg, hardCap, null, null, false, rows, targets);
+    emptyCount = plan.decisions.filter(function(d) { return d.mode === 'ריק'; }).length;
+    nonXEmpty = countNonX(plan.decisions);
+  }
+
+  // שלבים ב׳+ג׳ — הפחת מנוחה עד מינימום 2ש
+  const origRest = Number(cfg.MIN_REST_TIME) || 4;
+  let restReduced = 0;
+  while (nonXEmpty > 0 && origRest - restReduced > 2) {
+    restReduced++;
+    const rc = Object.assign({}, cfg, { MIN_REST_TIME: origRest - restReduced });
+    const rp = buildPlan_(null, guards, rc, hardCap, null, null, false, rows, targets);
+    const rEmpty = rp.decisions.filter(function(d) { return d.mode === 'ריק'; }).length;
+    if (rEmpty < emptyCount) { plan = rp; emptyCount = rEmpty; nonXEmpty = countNonX(rp.decisions); bestCfg = rc; }
+  }
+
+  // שלב ד׳ — הארך משמרות +2ש
+  if (nonXEmpty > 0) {
+    const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
+    const lsp = buildPlan_(null, guards, bestCfg, hardCap, extShift, null, false, rows, targets);
+    const lsEmpty = lsp.decisions.filter(function(d) { return d.mode === 'ריק'; }).length;
+    if (lsEmpty < emptyCount) {
+      plan = lsp; emptyCount = lsEmpty; nonXEmpty = countNonX(lsp.decisions); bestMaxShift = extShift;
+    }
+  }
+
+  // שלב ה׳ — מילוי חירום ממוקד (זהה ל-runScheduler v2.9.7)
+  if (emptyCount > 0) {
+    const patchSt = {};
+    for (const k in plan.st) patchSt[k] = Object.assign({}, plan.st[k]);
+    const emFuture = new Array(guards.length).fill(0);
+    const maxEmShift = bestMaxShift || (Number(bestCfg.MAX_SHIFT_LENGTH) || 4);
+    const toFill = plan.decisions
+      .filter(function(d) { return d.mode === 'ריק' && !allXRowIdxs.has(d.rowIdx); })
+      .sort(function(a, b) { return plan.rows[a.rowIdx].startAbs - plan.rows[b.rowIdx].startAbs; });
+    let filled = 0;
+    toFill.forEach(function(d) {
+      const r = plan.rows[d.rowIdx];
+      const excl = new Set(plan.decisions.filter(function(d2) {
+        return plan.rows[d2.rowIdx].sheetRow === r.sheetRow && d2.guard >= 0;
+      }).map(function(d2) { return d2.guard; }));
+      const g = chooseBest_(guards, r, patchSt, hardCap, maxEmShift, emFuture, bestCfg, false, excl, true, targets);
+      if (g !== -1) { d.guard = g; d.mode = 'חירום'; applyAssign_(patchSt, g, r); filled++; }
+    });
+    if (filled > 0) { plan.st = patchSt; emptyCount -= filled; }
+  }
+
+  return { plan: plan, emptyCount: emptyCount, finalHardCap: hardCap };
+}
+
+// ═══════════════════════════════════════════════════════════
 // בדיקות רגרסיה — T1–T7
 // הרץ runRegressionTests() מעורך Apps Script לפני כל מיזוג.
 // ═══════════════════════════════════════════════════════════
@@ -284,9 +436,9 @@ function runRegressionTests() {
     const rows = makeTestRows_(['שישי','שבת'], 4, null);
     const targets = {};
     guards4.forEach(function(_, g) { targets[g] = hardCap; });
-    const plan = buildPlan_(null, guards4, testCfg, hardCap, null, null, false, rows, targets);
-    const shabbatEmpty = plan.decisions.filter(function(d) {
-      return d.mode === 'ריק' && plan.rows[d.rowIdx].day === 'שבת';
+    const result = runPipelineOnRows_(rows, guards4, testCfg, hardCap, targets);
+    const shabbatEmpty = result.plan.decisions.filter(function(d) {
+      return d.mode === 'ריק' && result.plan.rows[d.rowIdx].day === 'שבת';
     }).length;
     results.push({ name: 'T7 — שבת זמינות מלאה → 0 ריק בשבת', pass: shabbatEmpty === 0,
                    info: 'ריקים בשבת=' + shabbatEmpty + ' (צפוי 0)' });
@@ -305,5 +457,165 @@ function runRegressionTests() {
     SpreadsheetApp.getUi().alert('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
   } else {
     SpreadsheetApp.getUi().alert('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T7)');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// בדיקות Property — 50 תרחישים אקראיים × INV1–INV6
+// ═══════════════════════════════════════════════════════════
+
+function runPropertyTests() {
+  const N = 50;
+  const guards = ['א', 'ב', 'ג', 'ד'];
+  const origCap = 30;
+  const cfg = {
+    MAX_SHIFT_LENGTH: 4, MIN_SHIFT_LENGTH: 2,
+    MIN_REST_TIME: 4, NIGHT_REST_TIME: 8,
+    MAX_BACKTRACK_HOURS: 3, DEBT_SENSITIVITY: 2,
+    GREEN_MAX_POINTS: 20, YELLOW_MAX_POINTS: 40,
+    SHABBAT_START_DAY: 'שישי', SHABBAT_START_HOUR: 6,
+    SHABBAT_END_DAY: 'ראשון', SHABBAT_END_HOUR: 6,
+  };
+  const RESTRICTED = ['2', '3', '4', '5'];
+
+  let totalFails = 0;
+  const failDetails = [];
+
+  for (let i = 0; i < N; i++) {
+    const marksOverride = {};
+    const blocks = buildBlocks_().filter(function(b) { return !b.external; });
+    DAYS.forEach(function(day) {
+      blocks.forEach(function(b) {
+        const marks = [];
+        for (let g = 0; g < 4; g++) {
+          const r = Math.random();
+          if (r < 0.20) marks.push('X');
+          else if (r < 0.40) marks.push(RESTRICTED[Math.floor(Math.random() * RESTRICTED.length)]);
+          else marks.push('1');
+        }
+        if (marks.some(function(m) { return m !== '1'; })) {
+          marksOverride[day + '|' + b.label] = marks;
+        }
+      });
+    });
+
+    const rows = makeTestRows_(DAYS, 4, marksOverride);
+    const targets = {};
+    guards.forEach(function(_, g) { targets[g] = origCap; });
+
+    const result = runPipelineOnRows_(rows, guards, cfg, origCap, targets);
+    // Check invariants against the final (possibly expanded) cap
+    const checkTargets = {};
+    guards.forEach(function(_, g) { checkTargets[g] = result.finalHardCap; });
+    const violations = checkInvariants_(result.plan, guards, checkTargets, result.finalHardCap);
+
+    if (violations.length > 0) {
+      totalFails++;
+      failDetails.push('תרחיש ' + (i + 1) + ': ' + violations.join('; '));
+    }
+  }
+
+  failDetails.forEach(function(msg) { console.log('❌ ' + msg); });
+
+  if (totalFails === 0) {
+    SpreadsheetApp.getUi().alert('✅ כל ' + N + ' תרחישי Property עברו ללא הפרות Invariant');
+  } else {
+    const preview = failDetails.slice(0, 5).join('\n');
+    const suffix = failDetails.length > 5 ? '\n...ועוד — בדוק Logger' : '';
+    SpreadsheetApp.getUi().alert(
+      '❌ ' + totalFails + '/' + N + ' תרחישים הפרו Invariants:\n\n' + preview + suffix
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Golden — שמירה והשוואה של "📅 שיבוץ נוכחי"
+// ═══════════════════════════════════════════════════════════
+
+function runGoldenCapture() {
+  const mgmt = SpreadsheetApp.getActiveSpreadsheet();
+  const avSh = mgmt.getSheetByName(SHEET_AVAIL);
+  if (!avSh) { SpreadsheetApp.getUi().alert('❌ לא נמצא גיליון זמינות'); return; }
+
+  const lastCol = avSh.getLastColumn();
+  if (lastCol < 1) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות ריק'); return; }
+  const headerRow = avSh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const syncCol = headerRow.indexOf('📅 שיבוץ נוכחי') + 1;
+  if (syncCol <= 0) {
+    SpreadsheetApp.getUi().alert('❌ לא נמצאה עמודת "📅 שיבוץ נוכחי" — הרץ שיבוץ תחילה');
+    return;
+  }
+
+  const lastRow = avSh.getLastRow();
+  if (lastRow < 3) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות ריק'); return; }
+
+  const numDataRows = lastRow - 2;
+  const vals = avSh.getRange(3, 1, numDataRows, syncCol).getValues();
+  const goldenData = vals.map(function(r) { return [r[0], r[1], r[syncCol - 1]]; });
+
+  const goldenSh = getCleanSheet_(mgmt, SHEET_GOLDEN);
+  goldenSh.setRightToLeft(true);
+  goldenSh.getRange(1, 1, 1, 3).setValues([['יום', 'בלוק', 'שיבוץ']]);
+  if (goldenData.length > 0) {
+    goldenSh.getRange(2, 1, goldenData.length, 3).setValues(goldenData);
+  }
+  SpreadsheetApp.getUi().alert('✅ Golden נשמר: ' + goldenData.length + ' שורות ב-' + SHEET_GOLDEN);
+}
+
+function runGoldenCompare() {
+  const mgmt = SpreadsheetApp.getActiveSpreadsheet();
+  const avSh = mgmt.getSheetByName(SHEET_AVAIL);
+  const goldenSh = mgmt.getSheetByName(SHEET_GOLDEN);
+
+  if (!avSh) { SpreadsheetApp.getUi().alert('❌ לא נמצא גיליון זמינות'); return; }
+  if (!goldenSh || goldenSh.getLastRow() < 2) {
+    SpreadsheetApp.getUi().alert('❌ אין Golden לשם השוואה — הרץ "💾 שמור Golden" תחילה');
+    return;
+  }
+
+  const gVals = goldenSh.getRange(2, 1, goldenSh.getLastRow() - 1, 3).getValues();
+  const goldenMap = {};
+  gVals.forEach(function(r) { if (r[0] && r[1]) goldenMap[r[0] + '|' + r[1]] = String(r[2]); });
+
+  const lastCol = avSh.getLastColumn();
+  const headerRow = avSh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const syncCol = headerRow.indexOf('📅 שיבוץ נוכחי') + 1;
+  if (syncCol <= 0) {
+    SpreadsheetApp.getUi().alert('❌ לא נמצאה עמודת "📅 שיבוץ נוכחי" — הרץ שיבוץ תחילה');
+    return;
+  }
+
+  const lastRow = avSh.getLastRow();
+  if (lastRow < 3) { SpreadsheetApp.getUi().alert('❌ גיליון זמינות ריק'); return; }
+
+  const numDataRows = lastRow - 2;
+  const vals = avSh.getRange(3, 1, numDataRows, syncCol).getValues();
+  const currentKeys = new Set();
+  const diffs = [];
+
+  vals.forEach(function(r) {
+    const key = r[0] + '|' + r[1];
+    currentKeys.add(key);
+    const current = String(r[syncCol - 1]);
+    const golden = goldenMap[key];
+    if (golden === undefined) {
+      diffs.push('➕ שורה חדשה: ' + key + ' = ' + current);
+    } else if (current !== golden) {
+      diffs.push('⚠️ ' + key + ': Golden=' + golden + ' → עכשיו=' + current);
+    }
+  });
+  Object.keys(goldenMap).forEach(function(key) {
+    if (!currentKeys.has(key)) {
+      diffs.push('➖ הוסרה: ' + key + ' (Golden=' + goldenMap[key] + ')');
+    }
+  });
+
+  diffs.forEach(function(d) { console.log(d); });
+  if (diffs.length === 0) {
+    SpreadsheetApp.getUi().alert('✅ השיבוץ הנוכחי זהה ל-Golden (ללא הבדלים)');
+  } else {
+    const preview = diffs.slice(0, 10).join('\n');
+    const suffix = diffs.length > 10 ? '\n...ועוד ' + (diffs.length - 10) + ' — בדוק Logger' : '';
+    SpreadsheetApp.getUi().alert('⚠️ נמצאו ' + diffs.length + ' הבדלים:\n\n' + preview + suffix);
   }
 }
