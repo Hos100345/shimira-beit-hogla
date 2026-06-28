@@ -10,22 +10,23 @@ function runAllTests() {
   // ─────────────────────────────────────────────
   (function() {
     const guards = ['א', 'ב'];
-    const r = { marks: ['3', '3'], isShabbat: true, external: false,
+    const r = { marks: ['1', '1'], isShabbat: true, external: false,
                  startAbs: 100, hours: 1, weight: 1, sheetRow: 3 };
+    // קונבנציה חדשה (v2.13): חוב חיובי = קיפוח → מעלה סף → עדיפות גבוהה יותר.
+    // שני השומרים עם 30 נק׳ שבת. שומר 0 עם shabbatDebt=10 → adjGreen=20+20=40 → 30≤40 → prio0.
+    // שומר 1 עם shabbatDebt=0 → adjGreen=20 → 30>20 → prio1. weekdayDebt=100 אצל 1 לא משפיע על שבת.
+    // צפוי: שומר 0 נבחר (החוב בשבת מזכה אותו בעדיפות).
     const st = {
-      0: { hours: 5, run: 0, lastEnd: 0, lastNight: false,
-           weekdayPoints: 0, shabbatPoints: 50, weekdayDebt: 0, shabbatDebt: 30 },
-      1: { hours: 5, run: 0, lastEnd: 0, lastNight: false,
-           weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 }
+      0: { hours: 0, run: 0, lastEnd: 0, lastNight: false,
+           weekdayPoints: 0, shabbatPoints: 30, weekdayDebt: 0, shabbatDebt: 10 },
+      1: { hours: 0, run: 0, lastEnd: 0, lastNight: false,
+           weekdayPoints: 0, shabbatPoints: 30, weekdayDebt: 100, shabbatDebt: 0 }
     };
-    // שומר 0: shabbatDebt=30 → adjustedYellow = 40−60 = −20 → priority=2
-    // שומר 1: shabbatDebt=0  → adjustedYellow = 40         → priority=0
-    // צפוי: שומר 1 נבחר (עדיפות נמוכה יותר = עדיף)
     const cfg = { GREEN_MAX_POINTS: 20, YELLOW_MAX_POINTS: 40, DEBT_SENSITIVITY: 2,
                   MIN_REST_TIME: 4, NIGHT_REST_TIME: 8, MIN_SHIFT_LENGTH: 2 };
     const chosen = chooseBest_(guards, r, st, 24, 4, [0, 0], cfg, false, new Set(), false, null);
-    results.push({ name: 'Bug #6 — chooseBest_ שבת', pass: chosen === 1,
-                   info: 'נבחר שומר ' + chosen + ' (צפוי 1)' });
+    results.push({ name: 'Bug #6 — חוב שבת מזכה בעדיפות + הפרדה', pass: chosen === 0,
+                   info: 'נבחר שומר ' + chosen + ' (צפוי 0)' });
   })();
 
   // ─────────────────────────────────────────────
@@ -33,19 +34,22 @@ function runAllTests() {
   // ─────────────────────────────────────────────
   (function() {
     const guards = ['א', 'ב'];
-    const r = { marks: ['3', '3'], isShabbat: false, external: false,
+    const r = { marks: ['1', '1'], isShabbat: false, external: false,
                  startAbs: 100, hours: 1, weight: 1, sheetRow: 3 };
+    // חול משתמש ב-weekdayDebt. שומר 0: weekdayDebt=10 → adjGreen=40 → 30≤40 → prio0.
+    // שומר 1: weekdayDebt=0, shabbatDebt=100 (לא משפיע על חול) → adjGreen=20 → 30>20 → prio1.
+    // צפוי: שומר 0 נבחר.
     const st = {
-      0: { hours: 5, run: 0, lastEnd: 0, lastNight: false,
-           weekdayPoints: 50, shabbatPoints: 0, weekdayDebt: 30, shabbatDebt: 0 },
-      1: { hours: 5, run: 0, lastEnd: 0, lastNight: false,
-           weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 }
+      0: { hours: 0, run: 0, lastEnd: 0, lastNight: false,
+           weekdayPoints: 30, shabbatPoints: 0, weekdayDebt: 10, shabbatDebt: 0 },
+      1: { hours: 0, run: 0, lastEnd: 0, lastNight: false,
+           weekdayPoints: 30, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 100 }
     };
     const cfg = { GREEN_MAX_POINTS: 20, YELLOW_MAX_POINTS: 40, DEBT_SENSITIVITY: 2,
                   MIN_REST_TIME: 4, NIGHT_REST_TIME: 8, MIN_SHIFT_LENGTH: 2 };
     const chosen = chooseBest_(guards, r, st, 24, 4, [0, 0], cfg, false, new Set(), false, null);
-    results.push({ name: 'Bug #6 — chooseBest_ חול', pass: chosen === 1,
-                   info: 'נבחר שומר ' + chosen + ' (צפוי 1)' });
+    results.push({ name: 'Bug #6 — חוב חול מזכה בעדיפות + הפרדה', pass: chosen === 0,
+                   info: 'נבחר שומר ' + chosen + ' (צפוי 0)' });
   })();
 
   // ─────────────────────────────────────────────
@@ -564,6 +568,45 @@ function runRegressionTests() {
   })();
 
   // ─────────────────────────────────────────────
+  // T15: חוב נצבר — newDebt = oldDebt + (חלק הוגן − שעות בפועל), בנפרד חול/שבת
+  // ─────────────────────────────────────────────
+  (function() {
+    const g2 = ['א', 'ב'];
+    // 8 בלוקי חול פנימיים (שעה כ״א) → ביקוש חול 8, אין מכסות → ממוצע 4 לכל שומר
+    const rows = [];
+    for (let i = 0; i < 8; i++) rows.push({ external: false, statusExternal: false, isShabbat: false, hours: 1 });
+    const st = {
+      0: { weekdayHours: 2, shabbatHours: 0, weekdayDebt: 0, shabbatDebt: 0 }, // עבד 2 < הוגן 4 → +2
+      1: { weekdayHours: 6, shabbatHours: 0, weekdayDebt: 0, shabbatDebt: 0 }, // עבד 6 > הוגן 4 → −2
+    };
+    finalizeDebt_(g2, st, rows, null);
+    const ok = st[0].weekdayDebt === 2 && st[1].weekdayDebt === -2 &&
+               st[0].shabbatDebt === 0 && st[1].shabbatDebt === 0;
+    results.push({ name: 'T15 — חוב נצבר לפי הוגן−בפועל', pass: ok,
+                   info: 'חוב0=' + st[0].weekdayDebt + ' חוב1=' + st[1].weekdayDebt + ' (צפוי 2, -2)' });
+  })();
+
+  // ─────────────────────────────────────────────
+  // T16: מנוחה אחרי משמרת לילה — דורשת NIGHT_REST גם לבלוק פנימי
+  // ─────────────────────────────────────────────
+  (function() {
+    const g1 = ['א'];
+    const cfgNR = Object.assign({}, testCfg, { MIN_REST_TIME: 4, NIGHT_REST_TIME: 8 });
+    const r = { marks: ['1'], isShabbat: false, external: false,
+                startAbs: 35, hours: 1, weight: 1, sheetRow: 9 };
+    // סיים משמרת בשעה 30, בלוק חדש ב-35 (פער 5ש): MIN_REST=4 מספיק, NIGHT_REST=8 לא.
+    const stNight = { 0: { hours: 4, run: 0, lastEnd: 30, lastNight: true,
+                           weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 } };
+    const stDay = { 0: { hours: 4, run: 0, lastEnd: 30, lastNight: false,
+                         weekdayPoints: 0, shabbatPoints: 0, weekdayDebt: 0, shabbatDebt: 0 } };
+    const afterNight = chooseBest_(g1, r, stNight, 24, 4, [0], cfgNR, false, new Set(), false, null);
+    const afterDay   = chooseBest_(g1, r, stDay,   24, 4, [0], cfgNR, false, new Set(), false, null);
+    const ok = afterNight === -1 && afterDay === 0;
+    results.push({ name: 'T16 — מנוחת לילה נאכפת אחרי משמרת לילה', pass: ok,
+                   info: 'אחרי-לילה=' + afterNight + ' אחרי-יום=' + afterDay + ' (צפוי -1, 0)' });
+  })();
+
+  // ─────────────────────────────────────────────
   // סיכום
   // ─────────────────────────────────────────────
   const passed = results.filter(function(r) { return r.pass; }).length;
@@ -575,7 +618,7 @@ function runRegressionTests() {
   if (failed > 0) {
     alertUser_('❌ ' + failed + ' בדיקות רגרסיה נכשלו — בדוק Logger לפרטים.');
   } else {
-    alertUser_('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T14)');
+    alertUser_('✅ כל ' + passed + ' בדיקות הרגרסיה עברו! (T1–T16)');
   }
 }
 

@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.12.1';
+const GS_VERSION = 'v2.13.0';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -144,7 +144,7 @@ function onOpen() {
     .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
  .addItem('⏱️ עדכן ממוצע שעות', 'fillGuardTargetAverages')
     .addSeparator()
-    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T14)', 'runRegressionTests')
+    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T16)', 'runRegressionTests')
     .addItem('🎲 בדיקות Property (50 תרחישים)', 'runPropertyTests')
     .addItem('💾 שמור Golden', 'runGoldenCapture')
     .addItem('🔍 השווה Golden', 'runGoldenCompare')
@@ -801,6 +801,7 @@ function runScheduler() {
     if (filled > 0) { emergencyUsed = true; emptyCount -= filled; plan.st = patchSt; }
   }
 
+  plan.targets = targets;
   plan.totalInternal = totalInternal;
   plan.numGuards = guards.length;
   plan.optCap = hardCap;
@@ -824,6 +825,7 @@ function replanSchedule() {
  const targets = readGuardTargets_(mgmt, guards, calcRequiredHours_(mgmt, guards, cfg));
  // jitter=true → פריסה חלופית אמיתית (אחרת מתקבל אותו שיבוץ בדיוק)
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, true, false, null, targets);
+ plan.targets = targets;
  writeScheduleResult_(mgmt, guards, plan);
 }
 
@@ -839,6 +841,7 @@ function extendAndReplan() {
  // maxShiftOverride מורחב → באמת מאריך משמרות (קודם הועבר null ולא הוארך כלום)
  const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, extShift, true, false, null, targets);
+ plan.targets = targets;
  writeScheduleResult_(mgmt, guards, plan);
 }
   
@@ -936,6 +939,7 @@ function writeScheduleResult_(mgmt, guards, plan) {
  alerts.push('🛌 ' + r.extName + ' רשום בחיצוני 22:00-02:00 ב' + r.day + ' — חסום מפנימי עד 10:00');  
  });  
   
+ finalizeDebt_(guards, st, rows, plan.targets);  // עדכן חוב נגרר לפני כתיבה להיסטוריה
  writeSchedule_(mgmt, rows, decisions, guards, st);
  syncCurrentSchedule_(mgmt, guards, rows, decisions);
  buildManagerView_(mgmt, guards, rows, decisions);
@@ -1322,15 +1326,36 @@ function onManagerEdit(e) {
 }
 
 
-function applyAssign_(st, g, r) {  
- const s = st[g];  
- s.run = (s.lastEnd === r.startAbs) ? s.run + r.hours : r.hours;  
- s.hours += r.hours;  
- if (r.isShabbat) s.shabbatPoints += r.weight * r.hours;  
- else s.weekdayPoints += r.weight * r.hours;  
- s.lastEnd = r.startAbs + r.hours;  
- s.lastNight = r.night || (s.lastNight && s.run > r.hours);  
-}  
+// עדכון חוב נגרר בסוף ריצה: newDebt = oldDebt + (חלק הוגן − שעות בפועל), בנפרד לחול/שבת.
+// חלק הוגן = ביקוש פנימי בהקשר × מכסת השומר / סך המכסות (מכסה ריקה → ממוצע).
+// חוב חיובי = השומר קופח (עבד פחות מחלקו) ויקבל עדיפות בשבוע הבא.
+function finalizeDebt_(guards, st, rows, targets) {
+ let wkDemand = 0, shDemand = 0;
+ rows.forEach(r => {
+   if (r.external || r.statusExternal) return; // בלוקים חיצוניים מכוסים בנפרד
+   if (r.isShabbat) shDemand += r.hours; else wkDemand += r.hours;
+ });
+ const avg = guards.length > 0 ? (wkDemand + shDemand) / guards.length : 0;
+ const eq = guards.map((_, g) => (targets && targets[g] > 0) ? targets[g] : avg);
+ const sumEq = eq.reduce((a, b) => a + b, 0) || 1;
+ const round1 = x => Math.round(x * 10) / 10;
+ guards.forEach((_, g) => {
+   const fairWk = wkDemand * eq[g] / sumEq;
+   const fairSh = shDemand * eq[g] / sumEq;
+   st[g].weekdayDebt = round1((st[g].weekdayDebt || 0) + (fairWk - (st[g].weekdayHours || 0)));
+   st[g].shabbatDebt = round1((st[g].shabbatDebt || 0) + (fairSh - (st[g].shabbatHours || 0)));
+ });
+}
+
+function applyAssign_(st, g, r) {
+ const s = st[g];
+ s.run = (s.lastEnd === r.startAbs) ? s.run + r.hours : r.hours;
+ s.hours += r.hours;
+ if (r.isShabbat) { s.shabbatPoints += r.weight * r.hours; s.shabbatHours = (s.shabbatHours || 0) + r.hours; }
+ else { s.weekdayPoints += r.weight * r.hours; s.weekdayHours = (s.weekdayHours || 0) + r.hours; }
+ s.lastEnd = r.startAbs + r.hours;
+ s.lastNight = r.night || (s.lastNight && s.run > r.hours);
+}
   
 function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, excluded, emergencyMode, targets) {
  const candidates = [];
@@ -1349,15 +1374,17 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  if (!emergencyMode) {
  const guardCap = (targets && targets[g] > 0) ? targets[g] : hardCap;
  if (s.hours >= guardCap) return;
- const rest = r.external ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
+ // מנוחת לילה נדרשת גם לפני בלוק חיצוני וגם אחרי משמרת לילה (s.lastNight) — אכיפת מנוחה אחרי לילה
+ const rest = (r.external || s.lastNight) ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
  if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  }
 
  const debtSensitivity = Number(cfg.DEBT_SENSITIVITY) || 2;
  const relevantDebt = r.isShabbat ? s.shabbatDebt : s.weekdayDebt;
  const relevantPoints = r.isShabbat ? s.shabbatPoints : s.weekdayPoints;
- const adjustedGreen = (Number(cfg.GREEN_MAX_POINTS) || 20) - relevantDebt * debtSensitivity;
- const adjustedYellow = (Number(cfg.YELLOW_MAX_POINTS) || 40) - relevantDebt * debtSensitivity;
+ // חוב חיובי = השומר קופח (עבד פחות ממכסתו) → מעלים את סף הרמזור כדי להעדיף אותו (פירעון חוב)
+ const adjustedGreen = (Number(cfg.GREEN_MAX_POINTS) || 20) + relevantDebt * debtSensitivity;
+ const adjustedYellow = (Number(cfg.YELLOW_MAX_POINTS) || 40) + relevantDebt * debtSensitivity;
 
  let priority = emergencyMode ? 3 : 0;
  if (!emergencyMode) {
@@ -1774,33 +1801,30 @@ function initState_(guards, mgmt, cfg) {
  const st = {};  
  const numG = guards.length;  
   
- guards.forEach((_, g) => {  
- st[g] = {  
- hours: 0, run: 0, lastEnd: 0, lastNight: false,  
- weekdayPoints: 0, shabbatPoints: 0,  
- weekdayDebt: 0, shabbatDebt: 0,  
- };  
- });  
-  
- if (!mgmt || !cfg) return st;  
-  
- const hi = mgmt.getSheetByName(SHEET_HISTORY);  
- if (!hi || hi.getLastRow() < 2) return st;  
-  
- const lastRow = hi.getRange(hi.getLastRow(), 1, 1, hi.getLastColumn()).getValues()[0];  
- const head = hi.getRange(1, 1, 1, hi.getLastColumn()).getValues()[0];  
-  
- guards.forEach((name, g) => {  
- const wdi = head.findIndex(h => h === name + " — נק׳ חול");  
- const shi = head.findIndex(h => h === name + " — נק׳ שבת");  
- const cdhi = head.findIndex(h => h === name + " — חוב חול");  
- const cshi = head.findIndex(h => h === name + " — חוב שבת");  
-  
- if (wdi >= 0) st[g].weekdayPoints = Number(lastRow[wdi]) || 0;
- if (shi >= 0) st[g].shabbatPoints = Number(lastRow[shi]) || 0;
+ guards.forEach((_, g) => {
+ st[g] = {
+ hours: 0, run: 0, lastEnd: 0, lastNight: false,
+ weekdayPoints: 0, shabbatPoints: 0,        // נקודות מתאפסות כל שבוע — לא נקראות מההיסטוריה
+ weekdayHours: 0, shabbatHours: 0,          // שעות בפועל לפי הקשר (לחישוב חוב בסוף הריצה)
+ weekdayDebt: 0, shabbatDebt: 0,            // חוב נגרר — כן נקרא מההיסטוריה
+ };
+ });
+
+ if (!mgmt || !cfg) return st;
+
+ const hi = mgmt.getSheetByName(SHEET_HISTORY);
+ if (!hi || hi.getLastRow() < 2) return st;
+
+ const lastRow = hi.getRange(hi.getLastRow(), 1, 1, hi.getLastColumn()).getValues()[0];
+ const head = hi.getRange(1, 1, 1, hi.getLastColumn()).getValues()[0];
+
+ // נקודות (Points) מתאפסות שבועית בכוונה — קוראים רק את החוב הנגרר (Debt).
+ guards.forEach((name, g) => {
+ const cdhi = head.findIndex(h => h === name + " — חוב חול");
+ const cshi = head.findIndex(h => h === name + " — חוב שבת");
  if (cdhi >= 0) st[g].weekdayDebt = Number(lastRow[cdhi]) || 0;
- if (cshi >= 0) st[g].shabbatDebt = Number(lastRow[cshi]) || 0;  
- });  
+ if (cshi >= 0) st[g].shabbatDebt = Number(lastRow[cshi]) || 0;
+ });
   
  return st;  
 }  
