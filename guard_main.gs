@@ -124,31 +124,36 @@ function blockWeight_(dayName, block, weights, cfg, marksForBlock) {
 /* ============================================================
  * 2. תפריט  
  * ============================================================ */  
-function onOpen() {  
- SpreadsheetApp.getUi()  
- .createMenu('🛡️ שיבוץ שמירות')  
- .addItem('▶️ הרץ שיבוץ', 'runScheduler')  
- .addItem('🔄 פרוס מחדש (פריסה חלופית)', 'replanSchedule')  
- .addItem('➕ הארך משמרות ופרוס', 'extendAndReplan')  
- .addItem('⚡ הפעל מילוי מהיר', 'runQuickFill')  
- .addItem('🚦 עדכן רמזור', 'updateTrafficLights')  
- .addSeparator()  
- .addItem('🏗️ שדרוג מבנה דינמי', 'setupV2')  
- .addItem('🔗 צור/עדכן קובץ זמינות', 'createAvailabilityFile')  
- .addItem('🔗 צור/קשר קובץ שומרים חיצוניים', 'createExternalFile')  
- .addItem('⏰ הפעל טריגרים', 'setupTriggers')  
- .addItem('📅 טען לוח חיצוניים — יוני 2026', 'fillExternalJune')  
- .addItem('📖 צור לשונית הוראות', 'createInstructionsSheet')  
- .addItem('🔄 אפס זמינות לשבוע חדש', 'resetAvailability')  
+function onOpen() {
+ try {
+ SpreadsheetApp.getUi()
+ .createMenu('🛡️ שיבוץ שמירות')
+ .addItem('▶️ הרץ שיבוץ', 'runScheduler')
+ .addItem('🔄 פרוס מחדש (פריסה חלופית)', 'replanSchedule')
+ .addItem('➕ הארך משמרות ופרוס', 'extendAndReplan')
+ .addItem('⚡ הפעל מילוי מהיר', 'runQuickFill')
+ .addItem('🚦 עדכן רמזור', 'updateTrafficLights')
+ .addSeparator()
+ .addItem('🏗️ שדרוג מבנה דינמי', 'setupV2')
+ .addItem('🔗 צור/עדכן קובץ זמינות', 'createAvailabilityFile')
+ .addItem('🔗 צור/קשר קובץ שומרים חיצוניים', 'createExternalFile')
+ .addItem('⏰ הפעל טריגרים', 'setupTriggers')
+ .addItem('📅 טען לוח חיצוניים — יוני 2026', 'fillExternalJune')
+ .addItem('📖 צור לשונית הוראות', 'createInstructionsSheet')
+ .addItem('🔄 אפס זמינות לשבוע חדש', 'resetAvailability')
  .addItem('📥 עבד תגובות ממשק', 'loadInterfaceResponsesFromUI')
     .addItem('📊 עדכן מבט מנהל', 'rebuildManagerViewFromMenu')
  .addItem('⏱️ עדכן ממוצע שעות', 'fillGuardTargetAverages')
     .addSeparator()
-    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T7)', 'runRegressionTests')
+    .addItem('🧪 הרץ בדיקות רגרסיה (T1–T13)', 'runRegressionTests')
     .addItem('🎲 בדיקות Property (50 תרחישים)', 'runPropertyTests')
     .addItem('💾 שמור Golden', 'runGoldenCapture')
     .addItem('🔍 השווה Golden', 'runGoldenCompare')
     .addToUi();
+ } catch (e) {
+   // הרצה מחוץ להקשר UI (למשל ▶️ Run ידני בעורך) — אין למה להוסיף תפריט. לא שגיאה אמיתית.
+   console.log('onOpen ללא הקשר UI (התעלם): ' + e.message);
+ }
 }
 
   
