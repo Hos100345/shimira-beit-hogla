@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.13.0';
+const GS_VERSION = 'v2.13.1';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -193,13 +193,14 @@ function setupV2() {
  ['MAX_SHIFT_LENGTH', 4, 'מקסימום שעות רצופות למשמרת אחת (ברירת מחדל: 4)'],
  ['MIN_SHIFT_LENGTH', 2, 'מינימום שעות רצופות לפני החלפת שומר (ברירת מחדל: 2)'],
  ['MIN_REST_TIME', 4, 'שעות מנוחה מינימליות בין שתי משמרות רגילות (ברירת מחדל: 4)'],
- ['NIGHT_REST_TIME', 8, 'שעות מנוחה חובה אחרי משמרת לילה (שעות קטנות, ברירת מחדל: 8)'],
+ ['NIGHT_REST_TIME', 8, 'שעות מנוחה לפני בלוק לילה חיצוני (22:00-02:00) (ברירת מחדל: 8)'],
+ ['REST_AFTER_NIGHT', 8, 'שעות מנוחה חובה אחרי משמרת לילה לפני שיבוץ הבא (ברירת מחדל: 8; ריק = כמו NIGHT_REST_TIME)'],
  ['MAX_BACKTRACK_HOURS', 3, 'מספר השעות שהאלגוריתם חוזר אחורה כשנתקע במבוי סתום (ברירת מחדל: 3)'],
  ['📊 ניקוד ואיזון', '', ''],
  ['MAX_WEEKDAY_DEBT_HOURS', 2, 'סף הפרש שעות שבועי בין שומרים; מעל הסף — האלגוריתם מאזן (ברירת מחדל: 2)'],
  ['GREEN_MAX_POINTS', 20, 'עד כמה נקודות X הצבורות השומר נשאר ירוק (פנוי לשיבוץ)'],
  ['YELLOW_MAX_POINTS', 40, 'עד כמה נקודות X = רמזור צהוב; מעל זה = אדום (עמוס — ישובץ רק בהכרח)'],
- ['DEBT_SENSITIVITY', 2, 'כמה נקודות חוב מהשבוע הקודם מורידות את סף הרמזור של השומר'],
+ ['DEBT_SENSITIVITY', 2, 'כמה כל שעת חוב מעלה את סף הרמזור (חוב חיובי = קופח → עדיפות גבוהה יותר)'],
  ['📅 חלון שבת', '', ''],
  ['SHABBAT_START_DAY', 'שישי', 'יום תחילת חלון שבת/חג (ברירת מחדל: שישי)'],
  ['SHABBAT_START_HOUR', 6, 'שעת פתיחת חלון שבת ביום ההתחלה — פורמט 24 שעות (ברירת מחדל: 6)'],
@@ -222,12 +223,15 @@ function setupV2() {
  sh.getRange(1, 1, rows.length, 3).setValues(rows);
  styleHeader_(sh.getRange(1, 1, 1, 3));
  sh.getRange(2, 2, rows.length - 1, 1).setBackground('#fff2cc');
- [2, 8, 14, 19].forEach(r => {
-   const hdr = sh.getRange(r, 1, 1, 3);
-   hdr.setBackground('#f3f3f3').setFontWeight('bold');
-   sh.getRange(r, 2).setBackground('#f3f3f3');
+ // עיצוב כותרות-תת דינמי: כותרת קיימת (A) אך גם ערך (B) וגם הסבר (C) ריקים
+ rows.forEach((r, i) => {
+   if (i === 0 || r[0] === '' || r[1] !== '' || r[2] !== '') return;
+   const sr = i + 1;
+   sh.getRange(sr, 1, 1, 3).setBackground('#f3f3f3').setFontWeight('bold');
  });
- sh.getRange(20, 2).setNumberFormat('dd/mm/yyyy');  
+ // פורמט תאריך לשורת WEEK_START_DATE (איתור דינמי — לא תלוי במיקום קבוע)
+ const wsdIdx = rows.findIndex(r => r[0] === 'WEEK_START_DATE');
+ if (wsdIdx >= 0) sh.getRange(wsdIdx + 1, 2).setNumberFormat('dd/mm/yyyy');
   
  const w = [
  ['סוג בלוק', 'משקל קושי'],
@@ -826,7 +830,7 @@ function replanSchedule() {
  // jitter=true → פריסה חלופית אמיתית (אחרת מתקבל אותו שיבוץ בדיוק)
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, null, true, false, null, targets);
  plan.targets = targets;
- writeScheduleResult_(mgmt, guards, plan);
+ writeScheduleResult_(mgmt, guards, plan, true); // אותו שבוע — לא לעדכן חוב/היסטוריה
 }
 
 function extendAndReplan() {
@@ -842,7 +846,7 @@ function extendAndReplan() {
  const extShift = (Number(cfg.MAX_SHIFT_LENGTH) || 4) + 2;
  const plan = buildPlan_(mgmt, guards, cfg, hardCap, extShift, true, false, null, targets);
  plan.targets = targets;
- writeScheduleResult_(mgmt, guards, plan);
+ writeScheduleResult_(mgmt, guards, plan, true); // אותו שבוע — לא לעדכן חוב/היסטוריה
 }
   
 /* ============================================================  
@@ -922,8 +926,9 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emerge
 // ══════════════════════════════════════════════════════════
 // § D · WRITERS   writeScheduleResult_ → writeSchedule_ / buildManagerView_ / writeHistory_ / publishSchedule_
 // ══════════════════════════════════════════════════════════
-function writeScheduleResult_(mgmt, guards, plan) {  
- const rows = plan.rows, decisions = plan.decisions, st = plan.st, hardCap = plan.hardCap, maxShift = plan.maxShift;  
+// skipHistory=true בפריסה-מחדש/הארכה (אותו שבוע) — לא לעדכן חוב ולא להוסיף שורת היסטוריה כפולה.
+function writeScheduleResult_(mgmt, guards, plan, skipHistory) {
+ const rows = plan.rows, decisions = plan.decisions, st = plan.st, hardCap = plan.hardCap, maxShift = plan.maxShift;
   
  const alerts = [];  
  decisions.forEach(d => {  
@@ -939,12 +944,12 @@ function writeScheduleResult_(mgmt, guards, plan) {
  alerts.push('🛌 ' + r.extName + ' רשום בחיצוני 22:00-02:00 ב' + r.day + ' — חסום מפנימי עד 10:00');  
  });  
   
- finalizeDebt_(guards, st, rows, plan.targets);  // עדכן חוב נגרר לפני כתיבה להיסטוריה
+ if (!skipHistory) finalizeDebt_(guards, st, rows, plan.targets);  // עדכן חוב נגרר רק בריצה ראשית
  writeSchedule_(mgmt, rows, decisions, guards, st);
  syncCurrentSchedule_(mgmt, guards, rows, decisions);
  buildManagerView_(mgmt, guards, rows, decisions);
- writeHistory_(mgmt, guards, st);  
- const pubUrl = publishSchedule_(mgmt);  
+ if (!skipHistory) writeHistory_(mgmt, guards, st);
+ const pubUrl = publishSchedule_(mgmt);
   
   let msg = '✅ השיבוץ הושלם! (מכסה: ' + hardCap + ' שעות לשומר';
   if (maxShift) msg += ', משמרת עד ' + maxShift + ' שעות';
@@ -1374,8 +1379,11 @@ function chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, j
  if (!emergencyMode) {
  const guardCap = (targets && targets[g] > 0) ? targets[g] : hardCap;
  if (s.hours >= guardCap) return;
- // מנוחת לילה נדרשת גם לפני בלוק חיצוני וגם אחרי משמרת לילה (s.lastNight) — אכיפת מנוחה אחרי לילה
- const rest = (r.external || s.lastNight) ? Number(cfg.NIGHT_REST_TIME) || 8 : Number(cfg.MIN_REST_TIME) || 4;
+ // מנוחה נדרשת: לפני בלוק חיצוני = NIGHT_REST_TIME; אחרי משמרת לילה = REST_AFTER_NIGHT; אחרת MIN_REST_TIME
+ const afterNightRest = Number(cfg.REST_AFTER_NIGHT) || Number(cfg.NIGHT_REST_TIME) || 8;
+ const rest = r.external ? (Number(cfg.NIGHT_REST_TIME) || 8)
+            : s.lastNight ? afterNightRest
+            : (Number(cfg.MIN_REST_TIME) || 4);
  if (!isConsecutive && s.lastEnd > 0 && r.startAbs < s.lastEnd + rest) return;
  }
 
