@@ -22,7 +22,7 @@ const SHEET_HISTORY = '📊 היסטוריה וחוב';
 const SHEET_QUICK = '⚡ מילוי מהיר'; // בקובץ החיצוני
 const SHEET_HELP = '📖 הוראות הפעלה';
 const SHEET_MANAGER = '📊 מבט מנהל';
-const GS_VERSION = 'v2.13.1';
+const GS_VERSION = 'v2.13.2';
   
 // ── מודל זמינות: דירוג 1–5 + X ──  
 // 1 = הכי נוח ... 5 = קשה מאוד, X = חסום קשיח, ריק = 1 (ברירת מחדל)  
@@ -863,10 +863,13 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emerge
  if (r.manual && r.manualIdx >= 0) futureManualHours[r.manualIdx] += r.hours;  
  });  
   
- const decisions = [];  
- let i = 0;  
- while (i < rows.length) {  
- const r = rows[i];  
+ const decisions = [];
+ let i = 0;
+ // תקציב נסיגה (backtrack) — מבטיח סיום: ללא תקרה, נסיגה יכולה להסתובב בלולאה אינסופית
+ // בין שתי שורות שנכשלות הדדית (נצפה בזמינות צפופה/הרבה X). כשהתקציב נגמר — סומן ריק.
+ let btBudget = rows.length * 3 + 50;
+ while (i < rows.length) {
+ const r = rows[i];
   
  if (r.manual && r.manualIdx >= 0) {  
  const g = r.manualIdx;  
@@ -898,9 +901,9 @@ function buildPlan_(mgmt, guards, cfg, hardCap, maxShiftOverride, jitter, emerge
  );  
  const g = chooseBest_(guards, r, st, hardCap, maxShift, futureManualHours, cfg, jitter, sameSlotExcluded, emergencyMode, targets);
  if (g === -1) {
- const bt = backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode, targets);  
- if (bt !== null) { i = bt; continue; }  
- decisions.push({ rowIdx: i, guard: -1, mode: 'ריק' });  
+ const bt = btBudget > 0 ? backtrack_(decisions, rows, st, guards, i, cfg, hardCap, maxShift, futureManualHours, jitter, emergencyMode, targets) : null;
+ if (bt !== null && bt <= i) { btBudget--; i = bt; continue; } // נסיגה אמיתית (אחורה) בלבד, עם תקציב
+ decisions.push({ rowIdx: i, guard: -1, mode: 'ריק' });
  i++;  
  continue;  
  }  
